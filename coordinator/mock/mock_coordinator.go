@@ -19,6 +19,7 @@ import (
 	rrelation "github.com/pg-sharding/spqr/pkg/models/rrelation"
 	tasks "github.com/pg-sharding/spqr/pkg/models/tasks"
 	topology "github.com/pg-sharding/spqr/pkg/models/topology"
+	meta_transaction "github.com/pg-sharding/spqr/pkg/models/transaction"
 	qdb "github.com/pg-sharding/spqr/qdb"
 	cache "github.com/pg-sharding/spqr/router/cache"
 	port "github.com/pg-sharding/spqr/router/port"
@@ -163,11 +164,12 @@ func (mr *MockCoordinatorMockRecorder) Cache() *gomock.Call {
 }
 
 // CreateDistribution mocks base method.
-func (m *MockCoordinator) CreateDistribution(ctx context.Context, ds *distributions.Distribution) error {
+func (m *MockCoordinator) CreateDistribution(ctx context.Context, ds *distributions.Distribution) (*meta_transaction.MetaTransactionChunk, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateDistribution", ctx, ds)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*meta_transaction.MetaTransactionChunk)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // CreateDistribution indicates an expected call of CreateDistribution.
@@ -301,6 +303,34 @@ func (m *MockCoordinator) DropShard(ctx context.Context, id string) error {
 func (mr *MockCoordinatorMockRecorder) DropShard(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropShard", reflect.TypeOf((*MockCoordinator)(nil).DropShard), ctx, id)
+}
+
+// ExecNoTran mocks base method.
+func (m *MockCoordinator) ExecNoTran(ctx context.Context, chunk *meta_transaction.MetaTransactionChunk) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecNoTran", ctx, chunk)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecNoTran indicates an expected call of ExecNoTran.
+func (mr *MockCoordinatorMockRecorder) ExecNoTran(ctx, chunk any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecNoTran", reflect.TypeOf((*MockCoordinator)(nil).ExecNoTran), ctx, chunk)
+}
+
+// ExecTran mocks base method.
+func (m *MockCoordinator) ExecTran(ctx context.Context, transaction *meta_transaction.MetaTransaction) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecTran", ctx, transaction)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecTran indicates an expected call of ExecTran.
+func (mr *MockCoordinatorMockRecorder) ExecTran(ctx, transaction any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecTran", reflect.TypeOf((*MockCoordinator)(nil).ExecTran), ctx, transaction)
 }
 
 // GetBalancerTask mocks base method.

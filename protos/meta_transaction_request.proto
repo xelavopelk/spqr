@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package spqr;
+
+option go_package = "spqr/proto";
+import "protos/distribution_entities.proto";
+import "protos/key_range.proto";
+
+message CreateDistributionGossip {
+  repeated Distribution distributions = 1;
+}
+
+message CreateKeyRangeGossip {
+  KeyRangeInfo key_range_info = 1;
+}
+
+message MetaTransactionGossip {
+  CreateDistributionGossip createDistribution = 1;
+  CreateKeyRangeGossip createKeyRangeRequest = 2;
+}

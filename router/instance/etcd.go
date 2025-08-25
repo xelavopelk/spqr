@@ -33,14 +33,19 @@ func (e *EtcdMetadataBootstrapper) InitializeMetadata(ctx context.Context, r Rou
 	if err != nil {
 		return err
 	}
-
+	mngr := r.Console().Mgr()
 	for _, d := range ds {
 		if d.ID == distributions.REPLICATED {
 			continue
 		}
-		if err := r.Console().Mgr().CreateDistribution(ctx, distributions.DistributionFromDB(d)); err != nil {
-			spqrlog.Zero.Error().Err(err).Msg("failed to initialize instance")
+
+		if tranChunk, err := mngr.CreateDistribution(ctx, distributions.DistributionFromDB(d)); err != nil {
+			spqrlog.Zero.Error().Err(err).Msg("failed to initialize instance (prepare)")
 			return err
+		} else {
+			if mngr.ExecNoTran(ctx, tranChunk); err != nil {
+				return err
+			}
 		}
 
 		/* initialize key ranges within distribution */

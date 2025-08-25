@@ -15,6 +15,11 @@ import (
 	"github.com/pg-sharding/spqr/pkg/spqrlog"
 )
 
+const (
+	MapRelationDistribution = "RelationDistribution"
+	MapDistributions        = "Distributions"
+)
+
 type MemQDB struct {
 	// TODO create more mutex per map if needed
 	mu sync.RWMutex
@@ -145,6 +150,69 @@ func (q *MemQDB) DumpState() error {
 	}
 
 	return nil
+}
+func (q *MemQDB) toRelationDistributionOper(stmt QdbStatement) (Command, error) {
+	switch stmt.CmdType {
+	case CMD_DELETE:
+		return NewDeleteCommand(q.RelationDistribution, stmt.Key), nil
+	case CMD_PUT:
+		return NewUpdateCommand(q.RelationDistribution, stmt.Key, stmt.Value), nil
+	default:
+		return nil, fmt.Errorf("unsupported memDB cmd %s (case 0)", stmt.CmdType)
+	}
+}
+func (q *MemQDB) toDistributions(stmt QdbStatement) (Command, error) {
+	switch stmt.CmdType {
+	case CMD_DELETE:
+		return NewDeleteCommand(q.Distributions, stmt.Key), nil
+	case CMD_PUT:
+		var distr Distribution
+		if err := json.Unmarshal([]byte(stmt.Value), &distr); err != nil {
+			return nil, err
+		} else {
+			return NewUpdateCommand(q.Distributions, stmt.Key, &distr), nil
+		}
+	default:
+		return nil, fmt.Errorf("unsupported memDB cmd %s (case 0)", stmt.CmdType)
+	}
+}
+func (q *MemQDB) ExecNoTransaction(ctx context.Context, stmts []QdbStatement) error {
+	spqrlog.Zero.Debug().Msg("memqdb: exec chunk commands without transaction")
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	memOprs := make([]Command, 0)
+	for _, stmt := range stmts {
+		switch stmt.Extension {
+		case MapRelationDistribution:
+			if operation, err := q.toRelationDistributionOper(stmt); err != nil {
+				return nil
+			} else {
+				memOprs = append(memOprs, operation)
+			}
+		case MapDistributions:
+			if operation, err := q.toDistributions(stmt); err != nil {
+				return err
+			} else {
+				memOprs = append(memOprs, operation)
+			}
+		default:
+			return fmt.Errorf("Not implemented for transaction memdb part %s ", stmt.Extension)
+		}
+	}
+	return ExecuteCommands(q.DumpState, memOprs...)
+}
+
+func (q *MemQDB) ExecTransaction(ctx context.Context, transaction *QdbTransaction) error {
+	spqrlog.Zero.Debug().Msg("memqdb: exec transaction")
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if transaction == nil {
+		return fmt.Errorf("cant't execute empty transaction")
+	}
+	//TODO: relize transaction like in ETCD
+	return q.ExecNoTransaction(ctx, transaction.commands)
 }
 
 // ==============================================================================
@@ -698,17 +766,31 @@ func (q *MemQDB) ListReferenceRelations(ctx context.Context) ([]*ReferenceRelati
 // ==============================================================================
 
 // TODO : unit tests
-func (q *MemQDB) CreateDistribution(_ context.Context, distribution *Distribution) error {
+func (q *MemQDB) CreateDistribution(_ context.Context, distribution *Distribution) ([]QdbStatement, error) {
 	spqrlog.Zero.Debug().Interface("distribution", distribution).Msg("memqdb: add distribution")
 	q.mu.Lock()
 	defer q.mu.Unlock()
-
+	commands := make([]QdbStatement, 0, len(distribution.Relations)+1)
 	for _, r := range distribution.Relations {
 		q.RelationDistribution[r.Name] = distribution.ID
-		_ = ExecuteCommands(q.DumpState, NewUpdateCommand(q.RelationDistribution, r.Name, distribution.ID))
+		if cmd, err := NewQdbStatementExt(CMD_PUT, r.Name, distribution.ID, MapRelationDistribution); err != nil {
+			return nil, err
+		} else {
+			commands = append(commands, *cmd)
+		}
+		//_ = ExecuteCommands(q.DumpState, NewUpdateCommand(q.RelationDistribution, r.Name, distribution.ID))
 	}
-
-	return ExecuteCommands(q.DumpState, NewUpdateCommand(q.Distributions, distribution.ID, distribution))
+	if distributionJSON, err := json.Marshal(*distribution); err != nil {
+		return nil, err
+	} else {
+		if cmd, err := NewQdbStatementExt(CMD_PUT, distribution.ID, string(distributionJSON), MapDistributions); err != nil {
+			return nil, err
+		} else {
+			commands = append(commands, *cmd)
+			return commands, nil
+		}
+	}
+	//return ExecuteCommands(q.DumpState, NewUpdateCommand(q.Distributions, distribution.ID, distribution))
 }
 
 // TODO : unit tests

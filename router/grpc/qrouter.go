@@ -141,17 +141,27 @@ func (l *LocalQrouterServer) GetShard(ctx context.Context, request *protos.Shard
 
 // CreateDistribution creates distribution in QDB
 // TODO: unit tests
-func (l *LocalQrouterServer) CreateDistribution(ctx context.Context, request *protos.CreateDistributionRequest) (*emptypb.Empty, error) {
+func (l *LocalQrouterServer) CreateDistribution(ctx context.Context, request *protos.CreateDistributionRequest) (*protos.CreateDistributionReply, error) {
+	reply := protos.CreateDistributionReply{MetaCmdList: make([]*protos.MetaTransactionGossip, 0),
+		CmdList: make([]*protos.QdbTransactionCmd, 0)}
 	for _, ds := range request.GetDistributions() {
 		mds, err := distributions.DistributionFromProto(ds)
 		if err != nil {
 			return nil, err
 		}
-		if err := l.mgr.CreateDistribution(ctx, mds); err != nil {
+		if tranChunk, err := l.mgr.CreateDistribution(ctx, mds); err != nil {
 			return nil, err
+		} else {
+			if len(tranChunk.QdbStatements) == 0 {
+				return nil, fmt.Errorf("transaction chunk must have a qdb statetment (qrouter.CreateDistribution)")
+			}
+			for _, qdbStmt := range tranChunk.QdbStatements {
+				reply.CmdList = append(reply.CmdList, qdbStmt.ToProto())
+			}
+			reply.MetaCmdList = append(reply.MetaCmdList, tranChunk.GossipRequests...)
 		}
 	}
-	return nil, nil
+	return &reply, nil
 }
 
 // DropDistribution deletes distribution from QDB

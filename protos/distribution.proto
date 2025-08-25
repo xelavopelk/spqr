@@ -6,38 +6,17 @@ option go_package = "spqr/proto";
 
 import "google/protobuf/empty.proto";
 import "protos/qualified_name.proto";
-
-message TypedColRef {
-  string columnName = 1;
-  string columnType = 2;
-}
-
-message RoutingExpr {
-  repeated TypedColRef colRefs = 1;
-}
-
-message DistributionKeyEntry {
-  string column = 1;
-  string hashFunction = 2;
-  RoutingExpr Expr = 3;
-}
-
-message DistributedRelation {
-  string name = 1;
-  repeated DistributionKeyEntry distributionKey = 2;
-  bool ReplicatedRelation = 3;
-  map<string, string> sequenceColumns = 4;
-  string schema_name = 5;
-}
-
-message Distribution {
-  string id = 1;
-  repeated string ColumnTypes = 2;
-  repeated DistributedRelation relations = 3;
-}
+import "protos/meta_transaction.proto";
+import "protos/meta_transaction_request.proto";
+import "protos/distribution_entities.proto";
 
 message CreateDistributionRequest{
   repeated Distribution distributions = 1;
+}
+
+message CreateDistributionReply{
+  repeated QdbTransactionCmd cmdList = 1;
+  repeated MetaTransactionGossip metaCmdList = 2;
 }
 
 message ListDistributionsReply {
@@ -117,7 +96,7 @@ message ListRelationSequencesReply {
 }
 
 service DistributionService {
-  rpc CreateDistribution(CreateDistributionRequest) returns (google.protobuf.Empty) {}
+  rpc CreateDistribution(CreateDistributionRequest) returns (CreateDistributionReply) {}
   rpc DropDistribution(DropDistributionRequest) returns (google.protobuf.Empty) {}
   rpc ListDistributions(google.protobuf.Empty) returns (ListDistributionsReply) {}
 

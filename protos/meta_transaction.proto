@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package spqr;
+
+option go_package = "spqr/proto";
+import "google/protobuf/empty.proto";
+import "protos/meta_transaction_request.proto";
+
+
+message QdbTransactionCmd {
+  string command = 1;
+  string key = 2;
+  string value = 3;
+  string extension = 4;
+}
+
+message MetaTransaction {
+    string transactionId = 1;
+    repeated QdbTransactionCmd cmdList = 2;
+    repeated MetaTransactionGossip metaCmdList = 3;
+}
+
+message MetaTransactionRequest {
+    MetaTransaction transaction = 1;
+}
+
+message ExecNoTranRequest {
+    repeated QdbTransactionCmd cmdList = 1;
+    repeated MetaTransactionGossip metaCmdList = 2;
+}
+
+service MetaTransactionService {
+  rpc ExecNoTran(ExecNoTranRequest) returns (google.protobuf.Empty) {}
+  rpc ExecTran(MetaTransactionRequest) returns (google.protobuf.Empty) {}
+}

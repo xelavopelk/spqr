@@ -43,6 +43,8 @@ type DistributedXactKeeper interface {
 // The router uses a memory-based version of this interface to cache routing schema state
 // while the coordinator uses etcd-based implementation to synchronize distributed state.
 type QDB interface {
+	ExecNoTransaction(ctx context.Context, operations []QdbStatement) error
+	ExecTransaction(ctx context.Context, transaction *QdbTransaction) error
 	// Key ranges
 	CreateKeyRange(ctx context.Context, keyRange *KeyRange) error
 	GetKeyRange(ctx context.Context, id string) (*KeyRange, error)
@@ -64,7 +66,7 @@ type QDB interface {
 	DropShard(ctx context.Context, shardID string) error
 
 	// Distribution management
-	CreateDistribution(ctx context.Context, distr *Distribution) error
+	CreateDistribution(ctx context.Context, distr *Distribution) ([]QdbStatement, error)
 	ListDistributions(ctx context.Context) ([]*Distribution, error)
 	DropDistribution(ctx context.Context, id string) error
 	GetDistribution(ctx context.Context, id string) (*Distribution, error)

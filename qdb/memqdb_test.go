@@ -46,7 +46,14 @@ func TestMemqdbRacing(t *testing.T) {
 	ctx := context.TODO()
 
 	methods := []func(){
-		func() { _ = memqdb.CreateDistribution(ctx, mockDistribution) },
+		func() {
+			if stmts, err := memqdb.CreateDistribution(ctx, mockDistribution); err != nil {
+				panic("fail run CreateDistribution in race test")
+			} else {
+				memqdb.ExecNoTransaction(ctx, stmts)
+			}
+
+		},
 		func() { _ = memqdb.CreateKeyRange(ctx, mockKeyRange) },
 		func() { _ = memqdb.AddRouter(ctx, mockRouter) },
 		func() { _ = memqdb.AddShard(ctx, mockShard) },
@@ -94,12 +101,13 @@ func TestDistributions(t *testing.T) {
 
 	ctx := context.TODO()
 
-	err = memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds1", nil))
-
+	stmts, err := memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds1", nil))
 	assert.NoError(err)
-
-	err = memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds2", nil))
-
+	err = memqdb.ExecNoTransaction(ctx, stmts)
+	assert.NoError(err)
+	stmts, err = memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds2", nil))
+	assert.NoError(err)
+	err = memqdb.ExecNoTransaction(ctx, stmts)
 	assert.NoError(err)
 
 	relation := &qdb.DistributedRelation{
@@ -155,8 +163,10 @@ func TestMemQDB_GetNotAttachedRelationDistribution(t *testing.T) {
 	assert.NoError(err)
 
 	ctx := context.TODO()
-
-	assert.NoError(memQDB.CreateDistribution(ctx, qdb.NewDistribution("ds1", nil)))
+	stmts, err := memQDB.CreateDistribution(ctx, qdb.NewDistribution("ds1", nil))
+	assert.NoError(err)
+	err = memQDB.ExecNoTransaction(ctx, stmts)
+	assert.NoError(err)
 
 	_, err = memQDB.GetRelationDistribution(ctx, &rfqn.RelationFQN{RelationName: "rel"})
 	assert.Error(err)
@@ -183,12 +193,14 @@ func TestKeyRanges(t *testing.T) {
 
 	ctx := context.TODO()
 
-	err = memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds1", nil))
-
+	stmts, err := memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds1", nil))
+	assert.NoError(err)
+	err = memqdb.ExecNoTransaction(ctx, stmts)
 	assert.NoError(err)
 
-	err = memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds2", nil))
-
+	stmts, err = memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds2", nil))
+	assert.NoError(err)
+	err = memqdb.ExecNoTransaction(ctx, stmts)
 	assert.NoError(err)
 
 	assert.NoError(memqdb.CreateKeyRange(ctx, &qdb.KeyRange{
@@ -217,10 +229,14 @@ func Test_MemQDB_GetKeyRange(t *testing.T) {
 
 	ctx := context.TODO()
 
-	err = memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds1", nil))
+	stmts, err := memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds1", nil))
+	assert.NoError(err)
+	err = memqdb.ExecNoTransaction(ctx, stmts)
 	assert.NoError(err)
 
-	err = memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds2", nil))
+	stmts, err = memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds2", nil))
+	assert.NoError(err)
+	err = memqdb.ExecNoTransaction(ctx, stmts)
 	assert.NoError(err)
 
 	keyRange1 := qdb.KeyRange{

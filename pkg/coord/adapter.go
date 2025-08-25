@@ -12,6 +12,7 @@ import (
 	"github.com/pg-sharding/spqr/pkg/models/spqrerror"
 	"github.com/pg-sharding/spqr/pkg/models/tasks"
 	"github.com/pg-sharding/spqr/pkg/models/topology"
+	mtran "github.com/pg-sharding/spqr/pkg/models/transaction"
 	proto "github.com/pg-sharding/spqr/pkg/protos"
 	"github.com/pg-sharding/spqr/qdb"
 	"github.com/pg-sharding/spqr/router/cache"
@@ -52,6 +53,19 @@ func (a *Adapter) QDB() qdb.QDB {
 
 func (a *Adapter) Cache() *cache.SchemaCache {
 	panic("Adapter.Cache not implemented")
+}
+func (a *Adapter) ExecNoTran(ctx context.Context, chunk *mtran.MetaTransactionChunk) error {
+	/*if reply, err := c.CreateDistribution(ctx, &proto.CreateDistributionRequest{
+		Distributions: []*proto.Distribution{
+			distributions.DistributionToProto(ds),
+		},
+	}); err != nil {
+		return nil, err
+	} */
+	panic("KLEPOV not implemented")
+}
+func (a *Adapter) ExecTran(ctx context.Context, transaction *mtran.MetaTransaction) error {
+	panic("KLEPOV not implemented")
 }
 
 // TODO : unit tests
@@ -768,15 +782,26 @@ func (a *Adapter) ListDistributions(ctx context.Context) ([]*distributions.Distr
 //
 // Returns:
 // - error: An error if the creation of the distribution fails, otherwise nil.
-func (a *Adapter) CreateDistribution(ctx context.Context, ds *distributions.Distribution) error {
+func (a *Adapter) CreateDistribution(ctx context.Context, ds *distributions.Distribution) (*mtran.MetaTransactionChunk, error) {
 	c := proto.NewDistributionServiceClient(a.conn)
 
-	_, err := c.CreateDistribution(ctx, &proto.CreateDistributionRequest{
+	if reply, err := c.CreateDistribution(ctx, &proto.CreateDistributionRequest{
 		Distributions: []*proto.Distribution{
 			distributions.DistributionToProto(ds),
 		},
-	})
-	return err
+	}); err != nil {
+		return nil, err
+	} else {
+		qdbCmds := make([]qdb.QdbStatement, 0, len(reply.CmdList))
+		for _, cmd := range reply.CmdList {
+			if qdbCmd, err := qdb.QdbStmtFromProto(cmd); err != nil {
+				return nil, err
+			} else {
+				qdbCmds = append(qdbCmds, *qdbCmd)
+			}
+		}
+		return mtran.NewMetaTransactionChunk(reply.MetaCmdList, qdbCmds)
+	}
 }
 
 // TODO : unit tests

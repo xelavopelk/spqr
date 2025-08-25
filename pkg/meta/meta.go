@@ -19,6 +19,7 @@ import (
 	"github.com/pg-sharding/spqr/pkg/models/spqrerror"
 	"github.com/pg-sharding/spqr/pkg/models/tasks"
 	"github.com/pg-sharding/spqr/pkg/models/topology"
+	mtran "github.com/pg-sharding/spqr/pkg/models/transaction"
 	"github.com/pg-sharding/spqr/pkg/pool"
 	"github.com/pg-sharding/spqr/pkg/shard"
 	"github.com/pg-sharding/spqr/pkg/spqrlog"
@@ -42,6 +43,7 @@ type EntityMgr interface {
 	tasks.TaskMgr
 	sequences.SequenceMgr
 	rrelation.ReferenceRelationMgr
+	mtran.TransactionExecutor
 
 	ShareKeyRange(id string) error
 
@@ -228,9 +230,13 @@ func createReplicatedDistribution(ctx context.Context, mngr EntityMgr) (*distrib
 			Id:       distributions.REPLICATED,
 			ColTypes: nil,
 		}
-		err := mngr.CreateDistribution(ctx, distribution)
+		transactionChunk, err := mngr.CreateDistribution(ctx, distribution)
 		if err != nil {
 			spqrlog.Zero.Debug().Err(err).Msg("failed to setup REPLICATED distribution")
+			return nil, err
+		}
+		err = mngr.ExecNoTran(ctx, transactionChunk)
+		if err != nil {
 			return nil, err
 		}
 		return distribution, nil
@@ -275,7 +281,11 @@ func createNonReplicatedDistribution(ctx context.Context,
 		}
 	}
 
-	err = mngr.CreateDistribution(ctx, distribution)
+	transactionChunk, err := mngr.CreateDistribution(ctx, distribution)
+	if err != nil {
+		return nil, err
+	}
+	err = mngr.ExecNoTran(ctx, transactionChunk)
 	if err != nil {
 		return nil, err
 	}

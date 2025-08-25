@@ -385,11 +385,12 @@ func (mr *MockQDBMockRecorder) CheckLockedKeyRange(ctx, id any) *gomock.Call {
 }
 
 // CreateDistribution mocks base method.
-func (m *MockQDB) CreateDistribution(ctx context.Context, distr *qdb.Distribution) error {
+func (m *MockQDB) CreateDistribution(ctx context.Context, distr *qdb.Distribution) ([]qdb.QdbStatement, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateDistribution", ctx, distr)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]qdb.QdbStatement)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // CreateDistribution indicates an expected call of CreateDistribution.
@@ -551,6 +552,34 @@ func (m *MockQDB) DropShard(ctx context.Context, shardID string) error {
 func (mr *MockQDBMockRecorder) DropShard(ctx, shardID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropShard", reflect.TypeOf((*MockQDB)(nil).DropShard), ctx, shardID)
+}
+
+// ExecNoTransaction mocks base method.
+func (m *MockQDB) ExecNoTransaction(ctx context.Context, operations []qdb.QdbStatement) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecNoTransaction", ctx, operations)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecNoTransaction indicates an expected call of ExecNoTransaction.
+func (mr *MockQDBMockRecorder) ExecNoTransaction(ctx, operations any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecNoTransaction", reflect.TypeOf((*MockQDB)(nil).ExecNoTransaction), ctx, operations)
+}
+
+// ExecTransaction mocks base method.
+func (m *MockQDB) ExecTransaction(ctx context.Context, transaction *qdb.QdbTransaction) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecTransaction", ctx, transaction)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecTransaction indicates an expected call of ExecTransaction.
+func (mr *MockQDBMockRecorder) ExecTransaction(ctx, transaction any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecTransaction", reflect.TypeOf((*MockQDB)(nil).ExecTransaction), ctx, transaction)
 }
 
 // GetBalancerTask mocks base method.
@@ -1216,11 +1245,12 @@ func (mr *MockXQDBMockRecorder) CloseRouter(ctx, rID any) *gomock.Call {
 }
 
 // CreateDistribution mocks base method.
-func (m *MockXQDB) CreateDistribution(ctx context.Context, distr *qdb.Distribution) error {
+func (m *MockXQDB) CreateDistribution(ctx context.Context, distr *qdb.Distribution) ([]qdb.QdbStatement, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateDistribution", ctx, distr)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]qdb.QdbStatement)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // CreateDistribution indicates an expected call of CreateDistribution.
@@ -1410,6 +1440,34 @@ func (m *MockXQDB) DropShard(ctx context.Context, shardID string) error {
 func (mr *MockXQDBMockRecorder) DropShard(ctx, shardID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropShard", reflect.TypeOf((*MockXQDB)(nil).DropShard), ctx, shardID)
+}
+
+// ExecNoTransaction mocks base method.
+func (m *MockXQDB) ExecNoTransaction(ctx context.Context, operations []qdb.QdbStatement) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecNoTransaction", ctx, operations)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecNoTransaction indicates an expected call of ExecNoTransaction.
+func (mr *MockXQDBMockRecorder) ExecNoTransaction(ctx, operations any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecNoTransaction", reflect.TypeOf((*MockXQDB)(nil).ExecNoTransaction), ctx, operations)
+}
+
+// ExecTransaction mocks base method.
+func (m *MockXQDB) ExecTransaction(ctx context.Context, transaction *qdb.QdbTransaction) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecTransaction", ctx, transaction)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecTransaction indicates an expected call of ExecTransaction.
+func (mr *MockXQDBMockRecorder) ExecTransaction(ctx, transaction any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecTransaction", reflect.TypeOf((*MockXQDB)(nil).ExecTransaction), ctx, transaction)
 }
 
 // GetBalancerTask mocks base method.

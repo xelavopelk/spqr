@@ -131,6 +131,28 @@ func (q *EtcdQDB) Client() *clientv3.Client {
 	return q.cli
 }
 
+func (q *EtcdQDB) ExecNoTransaction(ctx context.Context, operations []QdbStatement) error {
+	etcdOprs := make([]clientv3.Op, 0,len(operations))
+	for _, v := range operations {
+		switch v.CmdType {
+		case CMD_PUT:
+			etcdOprs = append(etcdOprs, clientv3.OpPut(v.Key, v.Value))
+		case CMD_DELETE:
+			etcdOprs = append(etcdOprs, clientv3.OpDelete(v.Key))
+		default:
+			return fmt.Errorf("not found operation type: %s", v.CmdType)
+		}
+	}
+	_, err := q.cli.Txn(ctx).Then(etcdOprs...).Commit()
+	return err
+}
+func (q *EtcdQDB) ExecTransaction(ctx context.Context, transaction *QdbTransaction) error {
+	if transaction == nil {
+		return fmt.Errorf("cant't execute empty transaction")
+	}
+	return fmt.Errorf("%s transaction is not implemented for etcddb", spqrerror.SPQR_NOT_IMPLEMENTED)
+}
+
 // ==============================================================================
 //                                 KEY RANGES
 // ==============================================================================
@@ -1086,25 +1108,24 @@ func (q *EtcdQDB) ListReferenceRelations(ctx context.Context) ([]*ReferenceRelat
 // ==============================================================================
 
 // TODO : unit tests
-func (q *EtcdQDB) CreateDistribution(ctx context.Context, distribution *Distribution) error {
+func (q *EtcdQDB) CreateDistribution(ctx context.Context, distribution *Distribution) ([]QdbStatement, error) {
 	spqrlog.Zero.Debug().
 		Str("id", distribution.ID).
 		Msg("etcdqdb: add distribution")
 
 	distrJson, err := json.Marshal(distribution)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	resp, err := q.cli.Put(ctx, distributionNodePath(distribution.ID), string(distrJson))
-	if err != nil {
-		return err
+	if resp, err := NewQdbStatement(CMD_PUT, distributionNodePath(distribution.ID), string(distrJson)); err != nil {
+		return nil, err
+	} else {
+		spqrlog.Zero.Debug().
+			Interface("response", resp).
+			Msg("etcdqdb: add distribution")
+
+		return []QdbStatement{*resp}, nil
 	}
-
-	spqrlog.Zero.Debug().
-		Interface("response", resp).
-		Msg("etcdqdb: add distribution")
-
-	return nil
 }
 
 // TODO : unit tests
@@ -1218,9 +1239,11 @@ func (q *EtcdQDB) AlterDistributionAttach(ctx context.Context, id string, rels [
 		}
 	}
 
-	err = q.CreateDistribution(ctx, distribution)
-
-	return err
+	if stmt, err := q.CreateDistribution(ctx, distribution); err != nil {
+		return err
+	} else {
+		return q.ExecNoTransaction(ctx, stmt)
+	}
 }
 
 // TODO: unit tests
@@ -1239,8 +1262,12 @@ func (q *EtcdQDB) AlterDistributionDetach(ctx context.Context, id string, relNam
 	}
 
 	delete(distribution.Relations, relName.RelationName)
-	if err = q.CreateDistribution(ctx, distribution); err != nil {
+	if stmt, err := q.CreateDistribution(ctx, distribution); err != nil {
 		return err
+	} else {
+		if err = q.ExecNoTransaction(ctx, stmt); err != nil {
+			return err
+		}
 	}
 
 	_, err = q.cli.Delete(ctx, relationMappingNodePath(relName.RelationName))
@@ -1269,9 +1296,11 @@ func (q *EtcdQDB) AlterDistributedRelation(ctx context.Context, id string, rel *
 		return spqrerror.Newf(spqrerror.SPQR_INVALID_REQUEST, "relation \"%s\" is attached to distribution \"%s\", attempt to alter in distribution \"%s\"", rel.Name, ds.ID, id)
 	}
 
-	err = q.CreateDistribution(ctx, distribution)
-
-	return err
+	if stmt, err := q.CreateDistribution(ctx, distribution); err != nil {
+		return err
+	} else {
+		return q.ExecNoTransaction(ctx, stmt)
+	}
 }
 
 // TODO : unit tests

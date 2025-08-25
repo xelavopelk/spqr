@@ -1,6 +1,7 @@
 package qdb
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/pg-sharding/spqr/pkg/spqrlog"
@@ -39,6 +40,15 @@ func (c *DeleteCommand[T]) Undo() error {
 
 func NewUpdateCommand[T any](m map[string]T, key string, value T) *UpdateCommand[T] {
 	return &UpdateCommand[T]{m: m, key: key, value: value}
+}
+
+func NewUpdateCommandRaw[T any](m map[string]T, key string, valueJson string) (*UpdateCommand[T], error) {
+	var valObject T
+	if err := json.Unmarshal([]byte(valueJson), &valObject); err != nil {
+		return nil, err
+	} else {
+		return &UpdateCommand[T]{m: m, key: key, value: valObject}, nil
+	}
 }
 
 type UpdateCommand[T any] struct {

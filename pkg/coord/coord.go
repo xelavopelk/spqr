@@ -8,6 +8,7 @@ import (
 	"github.com/pg-sharding/spqr/pkg/config"
 	"github.com/pg-sharding/spqr/pkg/datatransfers"
 	"github.com/pg-sharding/spqr/pkg/meta"
+	mtran "github.com/pg-sharding/spqr/pkg/models/transaction"
 	"github.com/pg-sharding/spqr/pkg/models/distributions"
 	"github.com/pg-sharding/spqr/pkg/models/kr"
 	"github.com/pg-sharding/spqr/pkg/models/rrelation"
@@ -31,6 +32,19 @@ func NewCoordinator(qdb qdb.XQDB) Coordinator {
 	return Coordinator{
 		qdb: qdb,
 	}
+}
+
+func (lc *Coordinator) ExecNoTran(ctx context.Context, chunk *mtran.MetaTransactionChunk) error {
+	if len(chunk.GossipRequests) > 0 {
+		return fmt.Errorf("gossip requests is supported in clustered mode only")
+	}
+	return lc.qdb.ExecNoTransaction(ctx, chunk.QdbStatements)
+}
+func (lc *Coordinator) ExecTran(ctx context.Context, transaction *mtran.MetaTransaction) error {
+	if len(transaction.GossipRequests) > 0 {
+		return fmt.Errorf("gossip requests is supported in clustered mode only")
+	}
+	return lc.qdb.ExecTransaction(ctx, &transaction.QdbTransaction)
 }
 
 // AlterReferenceRelationStorage implements meta.EntityMgr.
@@ -120,10 +134,14 @@ func (lc *Coordinator) CreateReferenceRelation(ctx context.Context, r *rrelation
 	selectedDistribId := distributions.REPLICATED
 
 	if _, err := lc.GetDistribution(ctx, selectedDistribId); err != nil {
-		err := lc.CreateDistribution(ctx, &distributions.Distribution{
+		chunk, err := lc.CreateDistribution(ctx, &distributions.Distribution{
 			Id:       distributions.REPLICATED,
 			ColTypes: nil,
 		})
+		if len(chunk.GossipRequests) > 0 {
+			return fmt.Errorf("unsupported gossip request in nonclustered mode (case 0)")
+		}
+		err = lc.qdb.ExecNoTransaction(ctx, chunk.QdbStatements)
 		if err != nil {
 			spqrlog.Zero.Debug().Err(err).Msg("failed to setup REPLICATED distribution")
 			return err
@@ -630,24 +648,32 @@ func (qc *Coordinator) ListDistributions(ctx context.Context) ([]*distributions.
 	return res, nil
 }
 
-func (qc *Coordinator) CreateDistribution(ctx context.Context, ds *distributions.Distribution) error {
+func (qc *Coordinator) CreateDistribution(ctx context.Context, ds *distributions.Distribution) (*mtran.MetaTransactionChunk, error) {
 	if len(ds.ColTypes) == 0 && ds.Id != distributions.REPLICATED {
-		return fmt.Errorf("empty distributions are disallowed")
+		return nil, fmt.Errorf("empty distributions are disallowed")
 	}
 	for _, rel := range ds.Relations {
 		for colName, SeqName := range rel.ColumnSequenceMapping {
 
 			if err := qc.qdb.CreateSequence(ctx, SeqName, 0); err != nil {
-				return err
+				return nil, err
 			}
 			qualifiedName := rel.ToRFQN()
 			err := qc.qdb.AlterSequenceAttach(ctx, SeqName, &qualifiedName, colName)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
-	return qc.qdb.CreateDistribution(ctx, distributions.DistributionToDB(ds))
+	if stmts, err := qc.qdb.CreateDistribution(ctx, distributions.DistributionToDB(ds)); err != nil {
+		return nil, err
+	} else {
+		if result, err := mtran.NewMetaTransactionChunk(nil, stmts); err != nil {
+			return nil, err
+		} else {
+			return result, nil
+		}
+	}
 }
 
 // TODO : unit tests

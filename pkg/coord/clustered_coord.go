@@ -32,6 +32,7 @@ import (
 	"github.com/pg-sharding/spqr/pkg/models/spqrerror"
 	"github.com/pg-sharding/spqr/pkg/models/tasks"
 	"github.com/pg-sharding/spqr/pkg/models/topology"
+	mtran "github.com/pg-sharding/spqr/pkg/models/transaction"
 	"github.com/pg-sharding/spqr/pkg/pool"
 	proto "github.com/pg-sharding/spqr/pkg/protos"
 	"github.com/pg-sharding/spqr/pkg/rulemgr"
@@ -530,6 +531,93 @@ func (qc *ClusteredCoordinator) traverseRouters(ctx context.Context, cb func(cc 
 
 	statistics.RecordRouterOperation(time.Since(t))
 	return nil
+}
+func gossipCreateDistribution(gossip *proto.CreateDistributionGossip) func(cc *grpc.ClientConn) error {
+	return func(cc *grpc.ClientConn) error {
+		cl := proto.NewDistributionServiceClient(cc)
+		resp, err := cl.CreateDistribution(context.TODO(), &proto.CreateDistributionRequest{
+			Distributions: gossip.Distributions,
+		})
+		if err != nil {
+			return err
+		}
+
+		spqrlog.Zero.Debug().
+			Interface("response", resp).
+			Msg("create distribution response")
+		return nil
+	}
+}
+
+func gossipCreateKeyRange(ctx context.Context, gossip *proto.CreateKeyRangeGossip) func(cc *grpc.ClientConn) error {
+	return func(cc *grpc.ClientConn) error {
+		cl := proto.NewKeyRangeServiceClient(cc)
+		resp, err := cl.CreateKeyRange(ctx, &proto.CreateKeyRangeRequest{
+			KeyRangeInfo: gossip.KeyRangeInfo,
+		})
+		spqrlog.Zero.Debug().Err(err).
+			Interface("response", resp).
+			Msg("add key range response")
+		return err
+	}
+}
+
+func (qc *ClusteredCoordinator) ExecNoTran(ctx context.Context, chunk *mtran.MetaTransactionChunk) error {
+	for _, gossipRequest := range chunk.GossipRequests {
+		if gossipType := mtran.GetGossipRequestType(gossipRequest); gossipType == mtran.GR_UNKNOWN {
+			return fmt.Errorf("invalid meta transaction request (case 1.1)")
+		}
+	}
+	noGossipChunk, _ := mtran.NewMetaTransactionChunk(nil, chunk.QdbStatements)
+	if err := qc.Coordinator.ExecNoTran(ctx, noGossipChunk); err != nil {
+		return err
+	} else {
+		for _, gossipRequest := range chunk.GossipRequests {
+			switch mtran.GetGossipRequestType(gossipRequest) {
+			case mtran.GR_CreateDistributionRequest:
+				if err := qc.traverseRouters(ctx, gossipCreateDistribution(gossipRequest.CreateDistribution)); err != nil {
+					return err
+				}
+			case mtran.GR_CreateKeyRange:
+				if err := qc.traverseRouters(ctx, gossipCreateKeyRange(ctx, gossipRequest.CreateKeyRangeRequest)); err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("invalid meta transaction request (case 1.2)")
+			}
+		}
+		return nil
+	}
+}
+func (qc *ClusteredCoordinator) ExecTran(ctx context.Context, transaction *mtran.MetaTransaction) error {
+	for _, gossipRequest := range transaction.GossipRequests {
+		if gossipType := mtran.GetGossipRequestType(gossipRequest); gossipType == mtran.GR_UNKNOWN {
+			return fmt.Errorf("invalid meta transaction request (case 2)")
+		}
+	}
+	if noGossipTran, err := mtran.NewTransaction(transaction.QdbTransaction.Id()); err != nil {
+		return fmt.Errorf("can't create nogossip tran in cluster coordinator (case 1)")
+	} else {
+		if err = qc.Coordinator.ExecTran(ctx, noGossipTran); err != nil {
+			return err
+		}
+		for _, gossipRequest := range transaction.GossipRequests {
+			switch mtran.GetGossipRequestType(gossipRequest) {
+			case mtran.GR_CreateDistributionRequest:
+				if err := qc.traverseRouters(ctx, gossipCreateDistribution(gossipRequest.CreateDistribution)); err != nil {
+					return err
+				}
+			case mtran.GR_CreateKeyRange:
+				if err := qc.traverseRouters(ctx, gossipCreateKeyRange(ctx, gossipRequest.CreateKeyRangeRequest)); err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("invalid meta transaction request (case 1.3)")
+			}
+		}
+		return nil
+	}
+
 }
 
 // TODO : unit tests
@@ -1960,25 +2048,20 @@ func (qc *ClusteredCoordinator) DropReferenceRelation(ctx context.Context,
 
 // CreateDistribution creates distribution in QDB
 // TODO: unit tests
-func (qc *ClusteredCoordinator) CreateDistribution(ctx context.Context, ds *distributions.Distribution) error {
-	if err := qc.Coordinator.CreateDistribution(ctx, ds); err != nil {
-		return err
-	}
-
-	return qc.traverseRouters(ctx, func(cc *grpc.ClientConn) error {
-		cl := proto.NewDistributionServiceClient(cc)
-		resp, err := cl.CreateDistribution(context.TODO(), &proto.CreateDistributionRequest{
-			Distributions: []*proto.Distribution{distributions.DistributionToProto(ds)},
-		})
-		if err != nil {
-			return err
+func (qc *ClusteredCoordinator) CreateDistribution(ctx context.Context, ds *distributions.Distribution) (*mtran.MetaTransactionChunk, error) {
+	if transactionChunk, err := qc.Coordinator.CreateDistribution(ctx, ds); err != nil {
+		return nil, err
+	} else {
+		if len(transactionChunk.GossipRequests) > 0 {
+			return nil, fmt.Errorf("clustered coord have got gossip requests from local coord (case 0)")
+		} else {
+			gossipReq := &proto.MetaTransactionGossip{CreateDistribution: &proto.CreateDistributionGossip{
+				Distributions: []*proto.Distribution{distributions.DistributionToProto(ds)},
+			}}
+			transactionChunk.GossipRequests = []*proto.MetaTransactionGossip{gossipReq}
+			return transactionChunk, nil
 		}
-
-		spqrlog.Zero.Debug().
-			Interface("response", resp).
-			Msg("create distribution response")
-		return nil
-	})
+	}
 }
 
 // DropDistribution deletes distribution from QDB

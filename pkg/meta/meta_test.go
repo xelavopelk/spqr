@@ -34,8 +34,12 @@ func prepareDB(ctx context.Context) (*qdb.MemQDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds1", nil)); err != nil {
+	if stmts, err := memqdb.CreateDistribution(ctx, qdb.NewDistribution("ds1", nil)); err != nil {
 		return nil, err
+	} else {
+		if memqdb.ExecNoTransaction(ctx, stmts) != nil {
+			return nil, err
+		}
 	}
 	if err = memqdb.AddShard(ctx, mockShard1); err != nil {
 		return nil, err
