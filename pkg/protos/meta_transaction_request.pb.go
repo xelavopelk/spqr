@@ -9,6 +9,7 @@ package proto
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -161,18 +162,66 @@ func (x *MetaTransactionGossip) GetCreateKeyRangeRequest() *CreateKeyRangeGossip
 	return nil
 }
 
+type MetaTransactionGossipRequest struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Commands      []*MetaTransactionGossip `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MetaTransactionGossipRequest) Reset() {
+	*x = MetaTransactionGossipRequest{}
+	mi := &file_protos_meta_transaction_request_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MetaTransactionGossipRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MetaTransactionGossipRequest) ProtoMessage() {}
+
+func (x *MetaTransactionGossipRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_protos_meta_transaction_request_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MetaTransactionGossipRequest.ProtoReflect.Descriptor instead.
+func (*MetaTransactionGossipRequest) Descriptor() ([]byte, []int) {
+	return file_protos_meta_transaction_request_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *MetaTransactionGossipRequest) GetCommands() []*MetaTransactionGossip {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
+}
+
 var File_protos_meta_transaction_request_proto protoreflect.FileDescriptor
 
 const file_protos_meta_transaction_request_proto_rawDesc = "" +
 	"\n" +
-	"%protos/meta_transaction_request.proto\x12\x04spqr\x1a\"protos/distribution_entities.proto\x1a\x16protos/key_range.proto\"T\n" +
+	"%protos/meta_transaction_request.proto\x12\x04spqr\x1a\x1bgoogle/protobuf/empty.proto\x1a\"protos/distribution_entities.proto\x1a\x16protos/key_range.proto\"T\n" +
 	"\x18CreateDistributionGossip\x128\n" +
 	"\rdistributions\x18\x01 \x03(\v2\x12.spqr.DistributionR\rdistributions\"P\n" +
 	"\x14CreateKeyRangeGossip\x128\n" +
 	"\x0ekey_range_info\x18\x01 \x01(\v2\x12.spqr.KeyRangeInfoR\fkeyRangeInfo\"\xb9\x01\n" +
 	"\x15MetaTransactionGossip\x12N\n" +
 	"\x12createDistribution\x18\x01 \x01(\v2\x1e.spqr.CreateDistributionGossipR\x12createDistribution\x12P\n" +
-	"\x15createKeyRangeRequest\x18\x02 \x01(\v2\x1a.spqr.CreateKeyRangeGossipR\x15createKeyRangeRequestB\fZ\n" +
+	"\x15createKeyRangeRequest\x18\x02 \x01(\v2\x1a.spqr.CreateKeyRangeGossipR\x15createKeyRangeRequest\"W\n" +
+	"\x1cMetaTransactionGossipRequest\x127\n" +
+	"\bcommands\x18\x01 \x03(\v2\x1b.spqr.MetaTransactionGossipR\bcommands2i\n" +
+	"\x1cMetaTransactionGossipService\x12I\n" +
+	"\tApplyMeta\x12\".spqr.MetaTransactionGossipRequest\x1a\x16.google.protobuf.Empty\"\x00B\fZ\n" +
 	"spqr/protob\x06proto3"
 
 var (
@@ -187,24 +236,29 @@ func file_protos_meta_transaction_request_proto_rawDescGZIP() []byte {
 	return file_protos_meta_transaction_request_proto_rawDescData
 }
 
-var file_protos_meta_transaction_request_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_protos_meta_transaction_request_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_protos_meta_transaction_request_proto_goTypes = []any{
-	(*CreateDistributionGossip)(nil), // 0: spqr.CreateDistributionGossip
-	(*CreateKeyRangeGossip)(nil),     // 1: spqr.CreateKeyRangeGossip
-	(*MetaTransactionGossip)(nil),    // 2: spqr.MetaTransactionGossip
-	(*Distribution)(nil),             // 3: spqr.Distribution
-	(*KeyRangeInfo)(nil),             // 4: spqr.KeyRangeInfo
+	(*CreateDistributionGossip)(nil),     // 0: spqr.CreateDistributionGossip
+	(*CreateKeyRangeGossip)(nil),         // 1: spqr.CreateKeyRangeGossip
+	(*MetaTransactionGossip)(nil),        // 2: spqr.MetaTransactionGossip
+	(*MetaTransactionGossipRequest)(nil), // 3: spqr.MetaTransactionGossipRequest
+	(*Distribution)(nil),                 // 4: spqr.Distribution
+	(*KeyRangeInfo)(nil),                 // 5: spqr.KeyRangeInfo
+	(*emptypb.Empty)(nil),                // 6: google.protobuf.Empty
 }
 var file_protos_meta_transaction_request_proto_depIdxs = []int32{
-	3, // 0: spqr.CreateDistributionGossip.distributions:type_name -> spqr.Distribution
-	4, // 1: spqr.CreateKeyRangeGossip.key_range_info:type_name -> spqr.KeyRangeInfo
+	4, // 0: spqr.CreateDistributionGossip.distributions:type_name -> spqr.Distribution
+	5, // 1: spqr.CreateKeyRangeGossip.key_range_info:type_name -> spqr.KeyRangeInfo
 	0, // 2: spqr.MetaTransactionGossip.createDistribution:type_name -> spqr.CreateDistributionGossip
 	1, // 3: spqr.MetaTransactionGossip.createKeyRangeRequest:type_name -> spqr.CreateKeyRangeGossip
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	2, // 4: spqr.MetaTransactionGossipRequest.commands:type_name -> spqr.MetaTransactionGossip
+	3, // 5: spqr.MetaTransactionGossipService.ApplyMeta:input_type -> spqr.MetaTransactionGossipRequest
+	6, // 6: spqr.MetaTransactionGossipService.ApplyMeta:output_type -> google.protobuf.Empty
+	6, // [6:7] is the sub-list for method output_type
+	5, // [5:6] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_protos_meta_transaction_request_proto_init() }
@@ -220,9 +274,9 @@ func file_protos_meta_transaction_request_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_protos_meta_transaction_request_proto_rawDesc), len(file_protos_meta_transaction_request_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
-			NumServices:   0,
+			NumServices:   1,
 		},
 		GoTypes:           file_protos_meta_transaction_request_proto_goTypes,
 		DependencyIndexes: file_protos_meta_transaction_request_proto_depIdxs,

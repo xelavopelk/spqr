@@ -54,6 +54,8 @@ const (
 
 	spqrQdbHost             = "qdb01"
 	checkCoordinatorTimeout = 15 * time.Second
+
+	SERVICE_STATE_RUNNING = "running"
 )
 
 type testContext struct {
@@ -543,6 +545,7 @@ func (tctx *testContext) executePostgresql(host string, query string) error {
 		if err != nil {
 			return err
 		}
+		time.Sleep(time.Second)
 	}
 	return nil
 }
@@ -690,6 +693,19 @@ func (tctx *testContext) stepHostIsStopped(service string) error {
 	}
 
 	err := tctx.composer.Stop(service)
+	//wait for the container to change state from running. it async operation to getting "stop result"
+	checkNotRunnigService := func() bool {
+		if state, err := tctx.composer.ContainerState(service); err != nil {
+			return false
+		} else {
+			return state != SERVICE_STATE_RUNNING
+		}
+	}
+	retryStop := testutil.Retry(checkNotRunnigService, time.Minute, time.Second)
+	if !retryStop {
+		return fmt.Errorf("timed out change state from 'running' %s", service)
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to stop service %s: %s", service, err)
 	}
@@ -704,7 +720,7 @@ func (tctx *testContext) stepHostIsStopped(service string) error {
 			if err != nil {
 				return err
 			}
-			if state == "running" {
+			if state == SERVICE_STATE_RUNNING {
 				anyCoord = true
 				break
 			}
@@ -1294,6 +1310,9 @@ func InitializeScenario(s *godog.ScenarioContext, t *testing.T, debug bool) {
 }
 
 func TestSpqr(t *testing.T) {
+	/*os.Setenv("DOCKER_API_VERSION", "1.47")
+	os.Setenv("GODOG_FEATURE_DIR", "generatedFeatures")
+	os.Setenv("GODOG_FEATURE", "coordintor_issues.feature")*/
 	paths := make([]string, 0)
 	featureDir := "features"
 	if feauterDirEnv, ok := os.LookupEnv("GODOG_FEATURE_DIR"); ok {

@@ -9,7 +9,11 @@ services:
         build:
             dockerfile: ./docker/spqr/Dockerfile
             context: .
-
+    spqr-base-image-debug:
+        image: spqr-base-image-debug
+        build:
+            dockerfile: ./docker/spqr/Dockerfile.debug
+            context: .
     x-shard-common: 
         &shard-common
         image: spqr-shard-image

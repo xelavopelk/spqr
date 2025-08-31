@@ -3,6 +3,7 @@ syntax = "proto3";
 package spqr;
 
 option go_package = "spqr/proto";
+import "google/protobuf/empty.proto";
 import "protos/distribution_entities.proto";
 import "protos/key_range.proto";
 
@@ -17,4 +18,12 @@ message CreateKeyRangeGossip {
 message MetaTransactionGossip {
   CreateDistributionGossip createDistribution = 1;
   CreateKeyRangeGossip createKeyRangeRequest = 2;
+}
+
+message MetaTransactionGossipRequest {
+  repeated MetaTransactionGossip commands = 1;
+}
+
+service MetaTransactionGossipService {
+  rpc ApplyMeta(MetaTransactionGossipRequest) returns (google.protobuf.Empty) {}
 }

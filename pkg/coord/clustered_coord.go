@@ -532,32 +532,14 @@ func (qc *ClusteredCoordinator) traverseRouters(ctx context.Context, cb func(cc 
 	statistics.RecordRouterOperation(time.Since(t))
 	return nil
 }
-func gossipCreateDistribution(gossip *proto.CreateDistributionGossip) func(cc *grpc.ClientConn) error {
-	return func(cc *grpc.ClientConn) error {
-		cl := proto.NewDistributionServiceClient(cc)
-		resp, err := cl.CreateDistribution(context.TODO(), &proto.CreateDistributionRequest{
-			Distributions: gossip.Distributions,
-		})
-		if err != nil {
-			return err
-		}
 
-		spqrlog.Zero.Debug().
-			Interface("response", resp).
-			Msg("create distribution response")
-		return nil
-	}
-}
-
-func gossipCreateKeyRange(ctx context.Context, gossip *proto.CreateKeyRangeGossip) func(cc *grpc.ClientConn) error {
+func gossipMetaChanges(ctx context.Context, gossip *proto.MetaTransactionGossipRequest) func(cc *grpc.ClientConn) error {
 	return func(cc *grpc.ClientConn) error {
-		cl := proto.NewKeyRangeServiceClient(cc)
-		resp, err := cl.CreateKeyRange(ctx, &proto.CreateKeyRangeRequest{
-			KeyRangeInfo: gossip.KeyRangeInfo,
-		})
+		cl := proto.NewMetaTransactionGossipServiceClient(cc)
+		resp, err := cl.ApplyMeta(ctx, gossip)
 		spqrlog.Zero.Debug().Err(err).
 			Interface("response", resp).
-			Msg("add key range response")
+			Msg("seng meta transaction gossip")
 		return err
 	}
 }
@@ -571,23 +553,11 @@ func (qc *ClusteredCoordinator) ExecNoTran(ctx context.Context, chunk *mtran.Met
 	noGossipChunk, _ := mtran.NewMetaTransactionChunk(nil, chunk.QdbStatements)
 	if err := qc.Coordinator.ExecNoTran(ctx, noGossipChunk); err != nil {
 		return err
-	} else {
-		for _, gossipRequest := range chunk.GossipRequests {
-			switch mtran.GetGossipRequestType(gossipRequest) {
-			case mtran.GR_CreateDistributionRequest:
-				if err := qc.traverseRouters(ctx, gossipCreateDistribution(gossipRequest.CreateDistribution)); err != nil {
-					return err
-				}
-			case mtran.GR_CreateKeyRange:
-				if err := qc.traverseRouters(ctx, gossipCreateKeyRange(ctx, gossipRequest.CreateKeyRangeRequest)); err != nil {
-					return err
-				}
-			default:
-				return fmt.Errorf("invalid meta transaction request (case 1.2)")
-			}
-		}
-		return nil
 	}
+	return qc.traverseRouters(ctx,
+		gossipMetaChanges(ctx, &proto.MetaTransactionGossipRequest{Commands: chunk.GossipRequests}),
+	)
+
 }
 func (qc *ClusteredCoordinator) ExecTran(ctx context.Context, transaction *mtran.MetaTransaction) error {
 	for _, gossipRequest := range transaction.GossipRequests {
@@ -601,21 +571,9 @@ func (qc *ClusteredCoordinator) ExecTran(ctx context.Context, transaction *mtran
 		if err = qc.Coordinator.ExecTran(ctx, noGossipTran); err != nil {
 			return err
 		}
-		for _, gossipRequest := range transaction.GossipRequests {
-			switch mtran.GetGossipRequestType(gossipRequest) {
-			case mtran.GR_CreateDistributionRequest:
-				if err := qc.traverseRouters(ctx, gossipCreateDistribution(gossipRequest.CreateDistribution)); err != nil {
-					return err
-				}
-			case mtran.GR_CreateKeyRange:
-				if err := qc.traverseRouters(ctx, gossipCreateKeyRange(ctx, gossipRequest.CreateKeyRangeRequest)); err != nil {
-					return err
-				}
-			default:
-				return fmt.Errorf("invalid meta transaction request (case 1.3)")
-			}
-		}
-		return nil
+		return qc.traverseRouters(ctx,
+			gossipMetaChanges(ctx, &proto.MetaTransactionGossipRequest{Commands: transaction.GossipRequests}),
+		)
 	}
 
 }
@@ -1634,6 +1592,85 @@ func (qc *ClusteredCoordinator) RenameKeyRange(ctx context.Context, krId, krIdNe
 	})
 }
 
+// made because of delve bugs
+func (qc *ClusteredCoordinator) innerSyncRouterMetadata(ctx context.Context, cc *grpc.ClientConn) error {
+	// Configure distributions
+	dsCl := proto.NewDistributionServiceClient(cc)
+	spqrlog.Zero.Debug().Msg("qdb coordinator: configure distributions")
+	dss, err := qc.ListDistributions(ctx)
+	if err != nil {
+		return err
+	}
+	resp, err := dsCl.ListDistributions(ctx, nil)
+	if err != nil {
+		return err
+	}
+	distribsToDel := make([]string, len(resp.Distributions))
+	for i, ds := range resp.Distributions {
+		distribsToDel[i] = ds.Id
+	}
+	if _, err = dsCl.DropDistribution(ctx, &proto.DropDistributionRequest{
+		Ids: distribsToDel,
+	}); err != nil {
+		return err
+	}
+	spqrlog.Zero.Debug().Msg("qdb coordinator: distributions dropped")
+	if len(dss) > 0 {
+		distribsToCreate := make([]*proto.Distribution, len(dss))
+		for i, ds := range dss {
+			distribsToCreate[i] = distributions.DistributionToProto(ds)
+		}
+		commands := []*proto.MetaTransactionGossip{
+			{CreateDistribution: &proto.CreateDistributionGossip{
+				Distributions: distribsToCreate,
+			},
+			},
+		}
+		gossipCl := proto.NewMetaTransactionGossipServiceClient(cc)
+		if _, err := gossipCl.ApplyMeta(ctx, &proto.MetaTransactionGossipRequest{Commands: commands}); err != nil {
+			return err
+		}
+		spqrlog.Zero.Debug().Msg("qdb coordinator: distributions created")
+	}
+	// Configure key ranges.
+	krClient := proto.NewKeyRangeServiceClient(cc)
+	spqrlog.Zero.Debug().Msg("qdb coordinator: configure key ranges")
+	if _, err = krClient.DropAllKeyRanges(ctx, nil); err != nil {
+		return err
+	}
+	if len(dss) > 0 {
+		for _, ds := range dss {
+			krs, err := qc.db.ListKeyRanges(ctx, ds.Id)
+			if err != nil {
+				return err
+			}
+
+			sort.Slice(krs, func(i, j int) bool {
+				l := kr.KeyRangeFromDB(krs[i], ds.ColTypes)
+				r := kr.KeyRangeFromDB(krs[j], ds.ColTypes)
+				return !kr.CmpRangesLess(l.LowerBound, r.LowerBound, ds.ColTypes)
+			})
+
+			for _, keyrange := range krs {
+				resp, err := krClient.CreateKeyRange(ctx, &proto.CreateKeyRangeRequest{
+					KeyRangeInfo: kr.KeyRangeFromDB(keyrange, ds.ColTypes).ToProto(),
+				})
+
+				if err != nil {
+					return err
+				}
+
+				spqrlog.Zero.Debug().
+					Interface("response", resp).
+					Msg("got response while adding key range")
+			}
+		}
+	}
+
+	spqrlog.Zero.Debug().Msg("successfully add all key ranges")
+	return nil
+}
+
 // TODO : unit tests
 func (qc *ClusteredCoordinator) SyncRouterMetadata(ctx context.Context, qRouter *topology.Router) error {
 	spqrlog.Zero.Debug().
@@ -1650,75 +1687,9 @@ func (qc *ClusteredCoordinator) SyncRouterMetadata(ctx context.Context, qRouter 
 		}
 	}()
 
-	// Configure distributions
-	dsCl := proto.NewDistributionServiceClient(cc)
-	spqrlog.Zero.Debug().Msg("qdb coordinator: configure distributions")
-	dss, err := qc.ListDistributions(ctx)
-	if err != nil {
+	if err := qc.innerSyncRouterMetadata(ctx, cc); err != nil {
 		return err
 	}
-	resp, err := dsCl.ListDistributions(ctx, nil)
-	if err != nil {
-		return err
-	}
-	if _, err = dsCl.DropDistribution(ctx, &proto.DropDistributionRequest{
-		Ids: func() []string {
-			res := make([]string, len(resp.Distributions))
-			for i, ds := range resp.Distributions {
-				res[i] = ds.Id
-			}
-			return res
-		}(),
-	}); err != nil {
-		return err
-	}
-	if _, err = dsCl.CreateDistribution(ctx, &proto.CreateDistributionRequest{
-		Distributions: func() []*proto.Distribution {
-			res := make([]*proto.Distribution, len(dss))
-			for i, ds := range dss {
-				res[i] = distributions.DistributionToProto(ds)
-			}
-			return res
-		}(),
-	}); err != nil {
-		return err
-	}
-
-	// Configure key ranges.
-	krClient := proto.NewKeyRangeServiceClient(cc)
-	spqrlog.Zero.Debug().Msg("qdb coordinator: configure key ranges")
-	if _, err = krClient.DropAllKeyRanges(ctx, nil); err != nil {
-		return err
-	}
-
-	for _, ds := range dss {
-		krs, err := qc.db.ListKeyRanges(ctx, ds.Id)
-		if err != nil {
-			return err
-		}
-
-		sort.Slice(krs, func(i, j int) bool {
-			l := kr.KeyRangeFromDB(krs[i], ds.ColTypes)
-			r := kr.KeyRangeFromDB(krs[j], ds.ColTypes)
-			return !kr.CmpRangesLess(l.LowerBound, r.LowerBound, ds.ColTypes)
-		})
-
-		for _, keyrange := range krs {
-			resp, err := krClient.CreateKeyRange(ctx, &proto.CreateKeyRangeRequest{
-				KeyRangeInfo: kr.KeyRangeFromDB(keyrange, ds.ColTypes).ToProto(),
-			})
-
-			if err != nil {
-				return err
-			}
-
-			spqrlog.Zero.Debug().
-				Interface("response", resp).
-				Msg("got response while adding key range")
-		}
-	}
-
-	spqrlog.Zero.Debug().Msg("successfully add all key ranges")
 
 	host, err := config.GetHostOrHostname(config.CoordinatorConfig().Host)
 	if err != nil {

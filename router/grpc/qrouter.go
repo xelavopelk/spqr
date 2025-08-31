@@ -13,9 +13,11 @@ import (
 	"github.com/pg-sharding/spqr/pkg/models/spqrerror"
 	"github.com/pg-sharding/spqr/pkg/models/tasks"
 	"github.com/pg-sharding/spqr/pkg/models/topology"
+	mtran "github.com/pg-sharding/spqr/pkg/models/transaction"
 	"github.com/pg-sharding/spqr/pkg/pool"
 	protos "github.com/pg-sharding/spqr/pkg/protos"
 	"github.com/pg-sharding/spqr/pkg/shard"
+	"github.com/pg-sharding/spqr/qdb"
 	"github.com/pg-sharding/spqr/router/qrouter"
 	"github.com/pg-sharding/spqr/router/rfqn"
 	"github.com/pg-sharding/spqr/router/rulerouter"
@@ -36,6 +38,7 @@ type LocalQrouterServer struct {
 	protos.UnimplementedShardServiceServer
 	protos.UnimplementedBalancerTaskServiceServer
 	protos.UnimplementedReferenceRelationsServiceServer
+	protos.UnimplementedMetaTransactionGossipServiceServer
 
 	qr  qrouter.QueryRouter
 	mgr meta.EntityMgr
@@ -139,12 +142,11 @@ func (l *LocalQrouterServer) GetShard(ctx context.Context, request *protos.Shard
 	}, nil
 }
 
-// CreateDistribution creates distribution in QDB
+// prepare QDB CreateDistribution commands
 // TODO: unit tests
-func (l *LocalQrouterServer) CreateDistribution(ctx context.Context, request *protos.CreateDistributionRequest) (*protos.CreateDistributionReply, error) {
-	reply := protos.CreateDistributionReply{MetaCmdList: make([]*protos.MetaTransactionGossip, 0),
-		CmdList: make([]*protos.QdbTransactionCmd, 0)}
-	for _, ds := range request.GetDistributions() {
+func (l *LocalQrouterServer) createDistributionPrepare(ctx context.Context, gossip *protos.CreateDistributionGossip) ([]qdb.QdbStatement, error) {
+	result := make([]qdb.QdbStatement, 0, len(gossip.GetDistributions()))
+	for _, ds := range gossip.GetDistributions() {
 		mds, err := distributions.DistributionFromProto(ds)
 		if err != nil {
 			return nil, err
@@ -153,15 +155,15 @@ func (l *LocalQrouterServer) CreateDistribution(ctx context.Context, request *pr
 			return nil, err
 		} else {
 			if len(tranChunk.QdbStatements) == 0 {
-				return nil, fmt.Errorf("transaction chunk must have a qdb statetment (qrouter.CreateDistribution)")
+				return nil, fmt.Errorf("transaction chunk must have a qdb statetment (createDistributionPrepare)")
 			}
-			for _, qdbStmt := range tranChunk.QdbStatements {
-				reply.CmdList = append(reply.CmdList, qdbStmt.ToProto())
-			}
-			reply.MetaCmdList = append(reply.MetaCmdList, tranChunk.GossipRequests...)
+			result = append(result, tranChunk.QdbStatements...)
 		}
 	}
-	return &reply, nil
+	return result, nil
+}
+func (l *LocalQrouterServer) CreateDistribution(ctx context.Context, request *protos.CreateDistributionRequest) (*protos.CreateDistributionReply, error) {
+	return nil, fmt.Errorf("DEPRECATED, remove after meta transaction implementation")
 }
 
 // DropDistribution deletes distribution from QDB
@@ -582,6 +584,32 @@ func (l *LocalQrouterServer) DropSequence(ctx context.Context, request *protos.D
 	return nil, err
 }
 
+func (l *LocalQrouterServer) ApplyMeta(ctx context.Context, request *protos.MetaTransactionGossipRequest) (*emptypb.Empty, error) {
+	toExecuteCmds := make([]qdb.QdbStatement, 0, len(request.Commands))
+	for _, gossipCommand := range request.Commands {
+		cmdType := mtran.GetGossipRequestType(gossipCommand)
+		switch cmdType {
+		case mtran.GR_CreateDistributionRequest:
+			if cmdList, err := l.createDistributionPrepare(ctx, gossipCommand.CreateDistribution); err != nil {
+				return nil, err
+			} else {
+				if len(cmdList) == 0 {
+					return nil, fmt.Errorf("no QDB changes in gossip request:%d", cmdType)
+				}
+				toExecuteCmds = append(toExecuteCmds, cmdList...)
+			}
+		//case mtran.GR_CreateKeyRange:
+		default:
+			return nil, fmt.Errorf("invalid meta gossip request:%d", cmdType)
+		}
+	}
+	if chunkCmd, err := mtran.NewMetaTransactionChunk(nil, toExecuteCmds); err != nil {
+		return nil, err
+	} else {
+		return nil, l.mgr.ExecNoTran(ctx, chunkCmd)
+	}
+}
+
 func Register(server reflection.GRPCServer, qrouter qrouter.QueryRouter, mgr meta.EntityMgr, rr rulerouter.RuleRouter) {
 
 	lqr := &LocalQrouterServer{
@@ -603,6 +631,7 @@ func Register(server reflection.GRPCServer, qrouter qrouter.QueryRouter, mgr met
 	protos.RegisterMoveTasksServiceServer(server, lqr)
 	protos.RegisterBalancerTaskServiceServer(server, lqr)
 	protos.RegisterReferenceRelationsServiceServer(server, lqr)
+	protos.RegisterMetaTransactionGossipServiceServer(server, lqr)
 }
 
 var _ protos.KeyRangeServiceServer = &LocalQrouterServer{}
@@ -616,3 +645,4 @@ var _ protos.MoveTasksServiceServer = &LocalQrouterServer{}
 var _ protos.BalancerTaskServiceServer = &LocalQrouterServer{}
 var _ protos.ShardServiceServer = &LocalQrouterServer{}
 var _ protos.ReferenceRelationsServiceServer = &LocalQrouterServer{}
+var _ protos.MetaTransactionGossipServiceServer = &LocalQrouterServer{}
