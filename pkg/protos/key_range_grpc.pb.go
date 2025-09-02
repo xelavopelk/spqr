@@ -45,7 +45,7 @@ type KeyRangeServiceClient interface {
 	ListKeyRange(ctx context.Context, in *ListKeyRangeRequest, opts ...grpc.CallOption) (*KeyRangeReply, error)
 	ListAllKeyRanges(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*KeyRangeReply, error)
 	LockKeyRange(ctx context.Context, in *LockKeyRangeRequest, opts ...grpc.CallOption) (*ModifyReply, error)
-	CreateKeyRange(ctx context.Context, in *CreateKeyRangeRequest, opts ...grpc.CallOption) (*ModifyReply, error)
+	CreateKeyRange(ctx context.Context, in *CreateKeyRangeRequest, opts ...grpc.CallOption) (*ModifyReplyTransaction, error)
 	DropKeyRange(ctx context.Context, in *DropKeyRangeRequest, opts ...grpc.CallOption) (*ModifyReply, error)
 	DropAllKeyRanges(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*DropAllKeyRangesResponse, error)
 	UnlockKeyRange(ctx context.Context, in *UnlockKeyRangeRequest, opts ...grpc.CallOption) (*ModifyReply, error)
@@ -106,9 +106,9 @@ func (c *keyRangeServiceClient) LockKeyRange(ctx context.Context, in *LockKeyRan
 	return out, nil
 }
 
-func (c *keyRangeServiceClient) CreateKeyRange(ctx context.Context, in *CreateKeyRangeRequest, opts ...grpc.CallOption) (*ModifyReply, error) {
+func (c *keyRangeServiceClient) CreateKeyRange(ctx context.Context, in *CreateKeyRangeRequest, opts ...grpc.CallOption) (*ModifyReplyTransaction, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ModifyReply)
+	out := new(ModifyReplyTransaction)
 	err := c.cc.Invoke(ctx, KeyRangeService_CreateKeyRange_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -224,7 +224,7 @@ type KeyRangeServiceServer interface {
 	ListKeyRange(context.Context, *ListKeyRangeRequest) (*KeyRangeReply, error)
 	ListAllKeyRanges(context.Context, *emptypb.Empty) (*KeyRangeReply, error)
 	LockKeyRange(context.Context, *LockKeyRangeRequest) (*ModifyReply, error)
-	CreateKeyRange(context.Context, *CreateKeyRangeRequest) (*ModifyReply, error)
+	CreateKeyRange(context.Context, *CreateKeyRangeRequest) (*ModifyReplyTransaction, error)
 	DropKeyRange(context.Context, *DropKeyRangeRequest) (*ModifyReply, error)
 	DropAllKeyRanges(context.Context, *emptypb.Empty) (*DropAllKeyRangesResponse, error)
 	UnlockKeyRange(context.Context, *UnlockKeyRangeRequest) (*ModifyReply, error)
@@ -257,7 +257,7 @@ func (UnimplementedKeyRangeServiceServer) ListAllKeyRanges(context.Context, *emp
 func (UnimplementedKeyRangeServiceServer) LockKeyRange(context.Context, *LockKeyRangeRequest) (*ModifyReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LockKeyRange not implemented")
 }
-func (UnimplementedKeyRangeServiceServer) CreateKeyRange(context.Context, *CreateKeyRangeRequest) (*ModifyReply, error) {
+func (UnimplementedKeyRangeServiceServer) CreateKeyRange(context.Context, *CreateKeyRangeRequest) (*ModifyReplyTransaction, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateKeyRange not implemented")
 }
 func (UnimplementedKeyRangeServiceServer) DropKeyRange(context.Context, *DropKeyRangeRequest) (*ModifyReply, error) {

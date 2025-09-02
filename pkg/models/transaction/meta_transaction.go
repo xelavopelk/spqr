@@ -23,6 +23,18 @@ type MetaTransactionChunk struct {
 	QdbStatements  []qdb.QdbStatement
 }
 
+// костыль для PoC, надо выводить в отдельную сущность с интерфейсом QDB
+type ChangedObjectsDB struct {
+	DistributionsUpd map[string]*qdb.Distribution
+	KeyRangeUpd      map[string]*qdb.KeyRange
+}
+
+func NewChangedObjectsDB() *ChangedObjectsDB {
+	return &ChangedObjectsDB{DistributionsUpd: map[string]*qdb.Distribution{},
+		KeyRangeUpd: map[string]*qdb.KeyRange{},
+	}
+}
+
 const (
 	GR_UNKNOWN = iota
 	GR_CreateDistributionRequest
@@ -30,7 +42,9 @@ const (
 )
 
 func NewMetaTransactionChunk(gossipRequests []*proto.MetaTransactionGossip,
-	qdbStatements []qdb.QdbStatement) (*MetaTransactionChunk, error) {
+	qdbStatements []qdb.QdbStatement,
+) (*MetaTransactionChunk, error) {
+
 	if len(qdbStatements) == 0 {
 		return nil, fmt.Errorf("transaction chunk must have a qdb statetment (case 0)")
 	} else {
@@ -48,8 +62,13 @@ func (tc *MetaTransactionChunk) Append(gossipRequests []*proto.MetaTransactionGo
 	} else {
 		tc.GossipRequests = append(tc.GossipRequests, gossipRequests...)
 		tc.QdbStatements = append(tc.QdbStatements, qdbStatements...)
+
 	}
 	return nil
+}
+
+func (tc *MetaTransactionChunk) AppendChunk(chunk *MetaTransactionChunk) error {
+	return tc.Append(chunk.GossipRequests, chunk.QdbStatements)
 }
 
 func NewTransaction(transactionId string) (*MetaTransaction, error) {

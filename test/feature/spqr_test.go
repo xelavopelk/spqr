@@ -1312,14 +1312,16 @@ func InitializeScenario(s *godog.ScenarioContext, t *testing.T, debug bool) {
 func TestSpqr(t *testing.T) {
 	/*os.Setenv("DOCKER_API_VERSION", "1.47")
 	os.Setenv("GODOG_FEATURE_DIR", "generatedFeatures")
-	os.Setenv("GODOG_FEATURE", "coordintor_issues.feature")*/
+	os.Setenv("GODOG_FEATURE", "balancer.feature")*/
 	paths := make([]string, 0)
 	featureDir := "features"
+
 	if feauterDirEnv, ok := os.LookupEnv("GODOG_FEATURE_DIR"); ok {
 		if len(feauterDirEnv) != 0 {
 			featureDir = feauterDirEnv
 		}
 	}
+
 	if featureEnv, ok := os.LookupEnv("GODOG_FEATURE"); ok {
 		for _, feature := range strings.Split(featureEnv, ";") {
 			if !strings.HasSuffix(feature, ".feature") {
@@ -1328,11 +1330,13 @@ func TestSpqr(t *testing.T) {
 			paths = append(paths, fmt.Sprintf("%s/%s", featureDir, feature))
 		}
 	}
+
 	if len(paths) == 0 {
 		paths = append(paths, featureDir)
 	}
 
 	debug := false
+
 	if debugEnv, ok := os.LookupEnv("FEATURE_DEBUG"); ok && strings.ToLower(debugEnv) == "true" {
 		debug = true
 	}
@@ -1350,7 +1354,9 @@ func TestSpqr(t *testing.T) {
 			Concurrency:   1,
 		},
 	}
+
 	if suite.Run() != 0 {
 		t.Fail()
 	}
+
 }

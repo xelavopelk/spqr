@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pg-sharding/spqr/pkg/models/tasks"
+	qdb "github.com/pg-sharding/spqr/qdb"
 
 	"github.com/pg-sharding/spqr/pkg/models/spqrerror"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -42,18 +43,20 @@ func (c *CoordinatorService) DropKeyRange(ctx context.Context, request *protos.D
 }
 
 // TODO : unit tests
-func (c *CoordinatorService) CreateKeyRange(ctx context.Context, request *protos.CreateKeyRangeRequest) (*protos.ModifyReply, error) {
+func (c *CoordinatorService) CreateKeyRange(ctx context.Context, request *protos.CreateKeyRangeRequest) (*protos.ModifyReplyTransaction, error) {
 	ds, err := c.impl.GetDistribution(ctx, request.KeyRangeInfo.DistributionId)
 	if err != nil {
 		return nil, err
 	}
-
-	err = c.impl.CreateKeyRange(ctx, kr.KeyRangeFromProto(request.KeyRangeInfo, ds.ColTypes))
+	cmdChunk, err := c.impl.CreateKeyRange(ctx, kr.KeyRangeFromProto(request.KeyRangeInfo, ds.ColTypes))
 	if err != nil {
 		return nil, err
 	}
 
-	return &protos.ModifyReply{}, nil
+	return &protos.ModifyReplyTransaction{
+		CmdList:     qdb.SliceToProto(cmdChunk.QdbStatements),
+		MetaCmdList: cmdChunk.GossipRequests,
+	}, nil
 }
 
 // TODO : unit tests

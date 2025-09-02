@@ -8,13 +8,13 @@ import (
 	"github.com/pg-sharding/spqr/pkg/config"
 	"github.com/pg-sharding/spqr/pkg/datatransfers"
 	"github.com/pg-sharding/spqr/pkg/meta"
-	mtran "github.com/pg-sharding/spqr/pkg/models/transaction"
 	"github.com/pg-sharding/spqr/pkg/models/distributions"
 	"github.com/pg-sharding/spqr/pkg/models/kr"
 	"github.com/pg-sharding/spqr/pkg/models/rrelation"
 	"github.com/pg-sharding/spqr/pkg/models/spqrerror"
 	"github.com/pg-sharding/spqr/pkg/models/tasks"
 	"github.com/pg-sharding/spqr/pkg/models/topology"
+	mtran "github.com/pg-sharding/spqr/pkg/models/transaction"
 	"github.com/pg-sharding/spqr/pkg/spqrlog"
 	"github.com/pg-sharding/spqr/qdb"
 	"github.com/pg-sharding/spqr/qdb/ops"
@@ -648,7 +648,9 @@ func (qc *Coordinator) ListDistributions(ctx context.Context) ([]*distributions.
 	return res, nil
 }
 
-func (qc *Coordinator) CreateDistribution(ctx context.Context, ds *distributions.Distribution) (*mtran.MetaTransactionChunk, error) {
+func (qc *Coordinator) CreateDistribution(ctx context.Context,
+	ds *distributions.Distribution,
+) (*mtran.MetaTransactionChunk, error) {
 	if len(ds.ColTypes) == 0 && ds.Id != distributions.REPLICATED {
 		return nil, fmt.Errorf("empty distributions are disallowed")
 	}
@@ -710,8 +712,18 @@ func (qc *Coordinator) ShareKeyRange(id string) error {
 //
 // Returns:
 // - error: An error if the creation encounters any issues.
-func (lc *Coordinator) CreateKeyRange(ctx context.Context, kr *kr.KeyRange) error {
-	return ops.CreateKeyRangeWithChecks(ctx, lc.qdb, kr)
+func (lc *Coordinator) CreateKeyRange(ctx context.Context,
+	kr *kr.KeyRange,
+) (*mtran.MetaTransactionChunk, error) {
+	if stmts, err := lc.qdb.CreateKeyRange(ctx, kr.ToDB()); err != nil {
+		return nil, err
+	} else {
+		if result, err := mtran.NewMetaTransactionChunk(nil, stmts); err != nil {
+			return nil, err
+		} else {
+			return result, nil
+		}
+	}
 }
 
 // TODO : unit tests
@@ -940,8 +952,10 @@ func (qc *Coordinator) Split(ctx context.Context, req *kr.SplitKeyRange) error {
 		ds.ColTypes,
 	)
 
-	if err := ops.CreateKeyRangeWithChecks(ctx, qc.qdb, krTemp); err != nil {
+	if stmts, err := ops.ToRemoveCreateKeyRangeWithChecks(ctx, qc.qdb, krTemp); err != nil {
 		return spqrerror.Newf(spqrerror.SPQR_KEYRANGE_ERROR, "failed to add a new key range: %s", err.Error())
+	} else {
+		qc.qdb.ExecNoTransaction(ctx, stmts)
 	}
 
 	spqrlog.Zero.Debug().

@@ -46,7 +46,7 @@ type QDB interface {
 	ExecNoTransaction(ctx context.Context, operations []QdbStatement) error
 	ExecTransaction(ctx context.Context, transaction *QdbTransaction) error
 	// Key ranges
-	CreateKeyRange(ctx context.Context, keyRange *KeyRange) error
+	CreateKeyRange(ctx context.Context, keyRange *KeyRange) ([]QdbStatement, error)
 	GetKeyRange(ctx context.Context, id string) (*KeyRange, error)
 	UpdateKeyRange(ctx context.Context, keyRange *KeyRange) error
 	DropKeyRange(ctx context.Context, id string) error

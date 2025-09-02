@@ -9,23 +9,24 @@ import (
 )
 
 // TODO : unit tests
-func CreateKeyRangeWithChecks(ctx context.Context, qdb qdb.QDB, keyRange *kr.KeyRange) error {
+// DEPRECATED . NEED REMOVE BL TO META PROCESSOR
+func ToRemoveCreateKeyRangeWithChecks(ctx context.Context, qdb qdb.QDB, keyRange *kr.KeyRange) ([]qdb.QdbStatement, error) {
 	if _, err := qdb.GetShard(ctx, keyRange.ShardID); err != nil {
-		return err
+		return nil, err
 	}
 
 	if _, err := qdb.GetKeyRange(ctx, keyRange.ID); err == nil {
-		return spqrerror.Newf(spqrerror.SPQR_KEYRANGE_ERROR, "key range %v already present in qdb", keyRange.ID)
+		return nil, spqrerror.Newf(spqrerror.SPQR_KEYRANGE_ERROR, "key range %v already present in qdb", keyRange.ID)
 	}
 
 	_, err := qdb.GetDistribution(ctx, keyRange.Distribution)
 	if err != nil {
-		return spqrerror.New(spqrerror.SPQR_OBJECT_NOT_EXIST, "try to add key range link to a nonexistent distribution")
+		return nil, spqrerror.New(spqrerror.SPQR_OBJECT_NOT_EXIST, "try to add key range link to a nonexistent distribution")
 	}
 
 	existsKrids, err := qdb.ListKeyRanges(ctx, keyRange.Distribution)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var nearestKr *kr.KeyRange = nil
@@ -40,10 +41,10 @@ func CreateKeyRangeWithChecks(ctx context.Context, qdb qdb.QDB, keyRange *kr.Key
 		}
 	}
 	if nearestKr != nil && kr.CmpRangesEqual(nearestKr.LowerBound, keyRange.LowerBound, keyRange.ColumnTypes) {
-		return spqrerror.Newf(spqrerror.SPQR_KEYRANGE_ERROR, "key range %v equals key range %v in QDB", keyRange.ID, nearestKr.ID)
+		return nil, spqrerror.Newf(spqrerror.SPQR_KEYRANGE_ERROR, "key range %v equals key range %v in QDB", keyRange.ID, nearestKr.ID)
 	}
 	if nearestKr != nil && nearestKr.ShardID != keyRange.ShardID {
-		return spqrerror.Newf(spqrerror.SPQR_KEYRANGE_ERROR, "key range %v intersects with key range %v in QDB", keyRange.ID, nearestKr.ID)
+		return nil, spqrerror.Newf(spqrerror.SPQR_KEYRANGE_ERROR, "key range %v intersects with key range %v in QDB", keyRange.ID, nearestKr.ID)
 	}
 
 	return qdb.CreateKeyRange(ctx, keyRange.ToDB())

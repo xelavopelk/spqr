@@ -33,33 +33,29 @@ Feature: Coordinator issues test
     Then command return code should be "0"
 
 
-  Scenario: Coordinator can restart
-    #
-    # Coordinator is Up
-    #
-    Given host "coordinator2" is stopped
+  Scenario: Router synchronization after registration works
     When I run SQL on host "coordinator"
     """
-    CREATE KEY RANGE krid3 FROM 31 ROUTE TO sh1 FOR DISTRIBUTION ds1
+    UNREGISTER ROUTER r1;
+    REGISTER ROUTER r1 ADDRESS regress_router::7000
     """
     Then command return code should be "0"
-
-    #
-    # Coordinator has been restarted
-    #
-    Given host "coordinator" is stopped
-    And host "coordinator" is started
-    When I run SQL on host "coordinator"
+    When I run SQL on host "router-admin"
     """
     SHOW key_ranges
     """
-    Then command return code should be "0"
-    And SQL result should match json
+    Then SQL result should match json_exactly
     """
     [{
-      "Key range ID":"krid3",
+      "Key range ID":"krid1",
       "Distribution ID":"ds1",
-      "Lower bound":"31",
+      "Lower bound":"50",
       "Shard ID":"sh1"
+    },
+    {
+      "Key range ID":"krid2",
+      "Distribution ID":"ds1",
+      "Lower bound":"100",
+      "Shard ID":"sh2"
     }]
     """

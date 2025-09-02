@@ -55,13 +55,6 @@ func (a *Adapter) Cache() *cache.SchemaCache {
 	panic("Adapter.Cache not implemented")
 }
 func (a *Adapter) ExecNoTran(ctx context.Context, chunk *mtran.MetaTransactionChunk) error {
-	/*if reply, err := c.CreateDistribution(ctx, &proto.CreateDistributionRequest{
-		Distributions: []*proto.Distribution{
-			distributions.DistributionToProto(ds),
-		},
-	}); err != nil {
-		return nil, err
-	} */
 	panic("KLEPOV not implemented")
 }
 func (a *Adapter) ExecTran(ctx context.Context, transaction *mtran.MetaTransaction) error {
@@ -263,12 +256,25 @@ func (a *Adapter) ListAllKeyRanges(ctx context.Context) ([]*kr.KeyRange, error) 
 //
 // Returns:
 // - error: An error if creating the key range was unsuccessful.
-func (a *Adapter) CreateKeyRange(ctx context.Context, kr *kr.KeyRange) error {
+func (a *Adapter) CreateKeyRange(ctx context.Context,
+	kr *kr.KeyRange) (*mtran.MetaTransactionChunk, error) {
 	c := proto.NewKeyRangeServiceClient(a.conn)
-	_, err := c.CreateKeyRange(ctx, &proto.CreateKeyRangeRequest{
+
+	if reply, err := c.CreateKeyRange(ctx, &proto.CreateKeyRangeRequest{
 		KeyRangeInfo: kr.ToProto(),
-	})
-	return err
+	}); err != nil {
+		return nil, err
+	} else {
+		qdbCmds := make([]qdb.QdbStatement, 0, len(reply.CmdList))
+		for _, cmd := range reply.CmdList {
+			if qdbCmd, err := qdb.QdbStmtFromProto(cmd); err != nil {
+				return nil, err
+			} else {
+				qdbCmds = append(qdbCmds, *qdbCmd)
+			}
+		}
+		return mtran.NewMetaTransactionChunk(reply.MetaCmdList, qdbCmds)
+	}
 }
 
 // TODO : unit tests
@@ -782,7 +788,9 @@ func (a *Adapter) ListDistributions(ctx context.Context) ([]*distributions.Distr
 //
 // Returns:
 // - error: An error if the creation of the distribution fails, otherwise nil.
-func (a *Adapter) CreateDistribution(ctx context.Context, ds *distributions.Distribution) (*mtran.MetaTransactionChunk, error) {
+func (a *Adapter) CreateDistribution(ctx context.Context,
+	ds *distributions.Distribution,
+) (*mtran.MetaTransactionChunk, error) {
 	c := proto.NewDistributionServiceClient(a.conn)
 
 	if reply, err := c.CreateDistribution(ctx, &proto.CreateDistributionRequest{

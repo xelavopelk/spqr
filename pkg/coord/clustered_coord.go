@@ -584,7 +584,7 @@ func (qc *ClusteredCoordinator) AddRouter(ctx context.Context, router *topology.
 }
 
 // TODO : unit tests
-func (qc *ClusteredCoordinator) CreateKeyRange(ctx context.Context, keyRange *kr.KeyRange) error {
+func (qc *ClusteredCoordinator) CreateKeyRange(ctx context.Context, keyRange *kr.KeyRange) (*mtran.MetaTransactionChunk, error) {
 	// add key range to metadb
 	spqrlog.Zero.Debug().
 		Bytes("lower-bound", keyRange.Raw()[0]).
@@ -592,20 +592,19 @@ func (qc *ClusteredCoordinator) CreateKeyRange(ctx context.Context, keyRange *kr
 		Str("key-range-id", keyRange.ID).
 		Msg("add key range")
 
-	if err := qc.Coordinator.CreateKeyRange(ctx, keyRange); err != nil {
-		return err
+	if transactionChunk, err := qc.Coordinator.CreateKeyRange(ctx, keyRange); err != nil {
+		return nil, err
+	} else {
+		if len(transactionChunk.GossipRequests) > 0 {
+			return nil, fmt.Errorf("clustered coord have got gossip requests from local coord (case 1)")
+		} else {
+			gossipReq := &proto.MetaTransactionGossip{CreateKeyRangeRequest: &proto.CreateKeyRangeGossip{
+				KeyRangeInfo: keyRange.ToProto(),
+			}}
+			transactionChunk.GossipRequests = []*proto.MetaTransactionGossip{gossipReq}
+			return transactionChunk, nil
+		}
 	}
-
-	return qc.traverseRouters(ctx, func(cc *grpc.ClientConn) error {
-		cl := proto.NewKeyRangeServiceClient(cc)
-		resp, err := cl.CreateKeyRange(ctx, &proto.CreateKeyRangeRequest{
-			KeyRangeInfo: keyRange.ToProto(),
-		})
-		spqrlog.Zero.Debug().Err(err).
-			Interface("response", resp).
-			Msg("add key range response")
-		return err
-	})
 }
 
 // TODO : unit tests
@@ -2019,7 +2018,9 @@ func (qc *ClusteredCoordinator) DropReferenceRelation(ctx context.Context,
 
 // CreateDistribution creates distribution in QDB
 // TODO: unit tests
-func (qc *ClusteredCoordinator) CreateDistribution(ctx context.Context, ds *distributions.Distribution) (*mtran.MetaTransactionChunk, error) {
+func (qc *ClusteredCoordinator) CreateDistribution(ctx context.Context,
+	ds *distributions.Distribution,
+) (*mtran.MetaTransactionChunk, error) {
 	if transactionChunk, err := qc.Coordinator.CreateDistribution(ctx, ds); err != nil {
 		return nil, err
 	} else {

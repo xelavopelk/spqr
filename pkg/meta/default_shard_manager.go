@@ -9,6 +9,7 @@ import (
 	"github.com/pg-sharding/spqr/pkg/models/distributions"
 	"github.com/pg-sharding/spqr/pkg/models/kr"
 	"github.com/pg-sharding/spqr/pkg/models/topology"
+	mtran "github.com/pg-sharding/spqr/pkg/models/transaction"
 	"github.com/pg-sharding/spqr/pkg/spqrlog"
 	"github.com/pg-sharding/spqr/qdb"
 	spqrparser "github.com/pg-sharding/spqr/yacc/console"
@@ -64,28 +65,36 @@ func (manager *DefaultShardManager) keyRangeDefault(DefaultShardId string) (*kr.
 	}
 }
 
-func (manager *DefaultShardManager) CreateDefaultShard(ctx context.Context, defaultShardId string) error {
+func (manager *DefaultShardManager) CreateDefaultShard(ctx context.Context,
+	defaultShardId string, tempDB *mtran.ChangedObjectsDB,
+) (*mtran.MetaTransactionChunk, error) {
 	if defaultShard, err := manager.mngr.GetShard(ctx, defaultShardId); err != nil {
-		return fmt.Errorf("shard '%s' does not exist", defaultShardId)
+		return nil, fmt.Errorf("shard '%s' does not exist", defaultShardId)
 	} else {
-		return manager.CreateDefaultShardNoCheck(ctx, defaultShard)
+		return manager.CreateDefaultShardNoCheck(ctx, defaultShard, tempDB)
 	}
 }
 
 func (manager *DefaultShardManager) CreateDefaultShardNoCheck(ctx context.Context,
-	defaultShard *topology.DataShard) error {
+	defaultShard *topology.DataShard, tempDB *mtran.ChangedObjectsDB,
+) (*mtran.MetaTransactionChunk, error) {
 	req, err := manager.keyRangeDefault(defaultShard.ID)
 	if err != nil {
 		spqrlog.Zero.Error().Err(err).Msg("error (1) when adding default key range for: " +
 			manager.distribution.Id)
-		return err
+		return nil, err
 	}
-	if err := manager.mngr.CreateKeyRange(ctx, req); err != nil {
+	if err := validateKeyRange(ctx, manager.mngr, req, tempDB); err != nil {
+		return nil, err
+	}
+	if cmdChunk, err := manager.mngr.CreateKeyRange(ctx, req); err != nil {
 		spqrlog.Zero.Error().Err(err).Msg("error (2) when adding default key range for: " +
 			manager.distribution.Id)
-		return err
+		return nil, err
+	} else {
+		tempDB.KeyRangeUpd[req.ID] = req.ToDB()
+		return cmdChunk, nil
 	}
-	return nil
 }
 
 func (manager *DefaultShardManager) DropDefaultShard(ctx context.Context) (*string, error) {

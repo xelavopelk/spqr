@@ -132,7 +132,7 @@ func (q *EtcdQDB) Client() *clientv3.Client {
 }
 
 func (q *EtcdQDB) ExecNoTransaction(ctx context.Context, operations []QdbStatement) error {
-	etcdOprs := make([]clientv3.Op, 0,len(operations))
+	etcdOprs := make([]clientv3.Op, 0, len(operations))
 	for _, v := range operations {
 		switch v.CmdType {
 		case CMD_PUT:
@@ -158,30 +158,26 @@ func (q *EtcdQDB) ExecTransaction(ctx context.Context, transaction *QdbTransacti
 // ==============================================================================
 
 // TODO : unit tests
-func (q *EtcdQDB) CreateKeyRange(ctx context.Context, keyRange *KeyRange) error {
+func (q *EtcdQDB) CreateKeyRange(ctx context.Context, keyRange *KeyRange) ([]QdbStatement, error) {
 	spqrlog.Zero.Debug().
 		Interface("key-range", keyRange).
 		Msg("etcdqdb: add key range")
 
-	t := time.Now()
-
 	rawKeyRange, err := json.Marshal(keyRange)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	resp, err := q.cli.Put(ctx, keyRangeNodePath(keyRange.KeyRangeID), string(rawKeyRange))
-	if err != nil {
-		return err
+	if resp, err := NewQdbStatement(CMD_PUT, keyRangeNodePath(keyRange.KeyRangeID), string(rawKeyRange)); err != nil {
+		return nil, err
+	} else {
+		spqrlog.Zero.Debug().
+			Interface("response", resp).
+			Msg("etcdqdb: put key range to qdb")
+
+		return []QdbStatement{*resp}, nil
 	}
-
-	spqrlog.Zero.Debug().
-		Interface("response", resp).
-		Msg("etcdqdb: put key range to qdb")
-
-	statistics.RecordQDBOperation("CreateKeyRange", time.Since(t))
-	return err
 }
 
 // TODO : unit tests
@@ -478,9 +474,13 @@ func (q *EtcdQDB) RenameKeyRange(ctx context.Context, krId, krIdNew string) erro
 		return err
 	}
 
-	err = q.CreateKeyRange(ctx, kr)
-	statistics.RecordQDBOperation("RenameKeyRange", time.Since(t))
-	return err
+	if cmdList, err := q.CreateKeyRange(ctx, kr); err != nil {
+		return err
+	} else {
+		err := q.ExecNoTransaction(ctx, cmdList)
+		statistics.RecordQDBOperation("RenameKeyRange", time.Since(t))
+		return err
+	}
 }
 
 // ==============================================================================

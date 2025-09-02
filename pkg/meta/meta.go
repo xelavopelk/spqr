@@ -260,7 +260,7 @@ func createNonReplicatedDistribution(ctx context.Context,
 	stmt spqrparser.DistributionDefinition,
 	mngr EntityMgr) (*distributions.Distribution, error) {
 	distribution := distributions.NewDistribution(stmt.ID, stmt.ColTypes)
-
+	tempDB := mtran.NewChangedObjectsDB()
 	dds, err := mngr.ListDistributions(ctx)
 	if err != nil {
 		return nil, err
@@ -280,24 +280,71 @@ func createNonReplicatedDistribution(ctx context.Context,
 			return nil, fmt.Errorf("attempt to create existing distribution")
 		}
 	}
-
 	transactionChunk, err := mngr.CreateDistribution(ctx, distribution)
 	if err != nil {
 		return nil, err
+	}
+	tempDB.DistributionsUpd[distribution.Id] = distributions.DistributionToDB(distribution)
+	if defaultShard != nil {
+		defaultShardManager := NewDefaultShardManager(distribution, mngr)
+		if cmdChunk, defShardRes := defaultShardManager.CreateDefaultShardNoCheck(ctx, defaultShard, tempDB); defShardRes != nil {
+			return nil, fmt.Errorf("distribution %s created, but keyrange not. Error: %s",
+				distribution.Id, defShardRes.Error())
+		} else {
+
+			transactionChunk.AppendChunk(cmdChunk)
+		}
 	}
 	err = mngr.ExecNoTran(ctx, transactionChunk)
 	if err != nil {
 		return nil, err
 	}
-	if defaultShard != nil {
-		defaultShardManager := NewDefaultShardManager(distribution, mngr)
-		if defShardRes := defaultShardManager.CreateDefaultShardNoCheck(ctx, defaultShard); defShardRes != nil {
-			return nil, fmt.Errorf("distribution %s created, but keyrange not. Error: %s",
-				distribution.Id, defShardRes.Error())
-		}
+	return distribution, nil
+}
+
+func validateKeyRange(ctx context.Context, mngr EntityMgr, keyRange *kr.KeyRange, changedObjs *mtran.ChangedObjectsDB) error {
+	if _, err := mngr.GetShard(ctx, keyRange.ShardID); err != nil {
+		return err
 	}
 
-	return distribution, nil
+	if _, err := mngr.GetKeyRange(ctx, keyRange.ID); err == nil {
+		return spqrerror.Newf(spqrerror.SPQR_KEYRANGE_ERROR, "key range %v already present in qdb", keyRange.ID)
+	}
+	if _, ok := changedObjs.KeyRangeUpd[keyRange.ID]; ok {
+		return spqrerror.Newf(spqrerror.SPQR_KEYRANGE_ERROR, "key range %v already present in cmd chunk", keyRange.ID)
+	}
+
+	_, err := mngr.GetDistribution(ctx, keyRange.Distribution)
+	_, okDistr := changedObjs.DistributionsUpd[keyRange.Distribution]
+	if err != nil && !okDistr {
+		return spqrerror.New(spqrerror.SPQR_OBJECT_NOT_EXIST, "try to add key range link to a nonexistent distribution")
+	}
+
+	existsKrids, err := mngr.ListKeyRanges(ctx, keyRange.Distribution)
+	if err != nil {
+		return err
+	}
+
+	var nearestKr *kr.KeyRange = nil
+	for _, v := range existsKrids {
+		dbKr := v.ToDB()
+		eph := kr.KeyRangeFromBytes(dbKr.LowerBound, keyRange.ColumnTypes)
+		if kr.CmpRangesLessEqual(eph.LowerBound, keyRange.LowerBound, keyRange.ColumnTypes) {
+			if nearestKr == nil || kr.CmpRangesLess(nearestKr.LowerBound, eph.LowerBound, nearestKr.ColumnTypes) {
+				nearestKr = eph
+				nearestKr.ID = dbKr.KeyRangeID
+				nearestKr.ShardID = v.ShardID
+			}
+		}
+	}
+	if nearestKr != nil && kr.CmpRangesEqual(nearestKr.LowerBound, keyRange.LowerBound, keyRange.ColumnTypes) {
+		return spqrerror.Newf(spqrerror.SPQR_KEYRANGE_ERROR, "key range %v equals key range %v in QDB", keyRange.ID, nearestKr.ID)
+	}
+	if nearestKr != nil && nearestKr.ShardID != keyRange.ShardID {
+		return spqrerror.Newf(spqrerror.SPQR_KEYRANGE_ERROR, "key range %v intersects with key range %v in QDB", keyRange.ID, nearestKr.ID)
+	}
+
+	return nil
 }
 
 // TODO : unit tests
@@ -350,6 +397,7 @@ func processCreate(ctx context.Context, astmt spqrparser.Statement, mngr EntityM
 	case *spqrparser.ShardingRuleDefinition:
 		return cli.ReportError(spqrerror.ShardingRulesRemoved)
 	case *spqrparser.KeyRangeDefinition:
+		tempDB := mtran.NewChangedObjectsDB()
 		if stmt.Distribution.ID == "default" {
 			list, err := mngr.ListDistributions(ctx)
 			if err != nil {
@@ -378,9 +426,16 @@ func processCreate(ctx context.Context, astmt spqrparser.Statement, mngr EntityM
 			spqrlog.Zero.Error().Err(err).Msg("Error when adding key range")
 			return cli.ReportError(err)
 		}
-		if err := mngr.CreateKeyRange(ctx, req); err != nil {
+		if err != validateKeyRange(ctx, mngr, req, tempDB) {
+			return err
+		}
+		if cmdChunk, err := mngr.CreateKeyRange(ctx, req); err != nil {
 			spqrlog.Zero.Error().Err(err).Msg("Error when adding key range")
 			return cli.ReportError(err)
+		} else {
+			if err = mngr.ExecNoTran(ctx, cmdChunk); err != nil {
+				return err
+			}
 		}
 		return cli.CreateKeyRange(ctx, req)
 	case *spqrparser.ShardDefinition:
@@ -480,12 +535,18 @@ func processAlterDistribution(ctx context.Context, astmt spqrparser.Statement, m
 			}
 		}
 	case *spqrparser.AlterDefaultShard:
+		tempDB := mtran.NewChangedObjectsDB()
 		if distribution, err := mngr.GetDistribution(ctx, stmt.Distribution.ID); err != nil {
 			return err
 		} else {
 			manager := NewDefaultShardManager(distribution, mngr)
-			if err := manager.CreateDefaultShard(ctx, stmt.Shard); err != nil {
+			if transactionChunk, err := manager.CreateDefaultShard(ctx, stmt.Shard, tempDB); err != nil {
 				return err
+			} else {
+				err = mngr.ExecNoTran(ctx, transactionChunk)
+				if err != nil {
+					return err
+				}
 			}
 			return cli.MakeSimpleResponse(ctx, manager.SuccessCreateResponse(stmt.Shard))
 		}

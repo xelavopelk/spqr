@@ -144,7 +144,8 @@ func (l *LocalQrouterServer) GetShard(ctx context.Context, request *protos.Shard
 
 // prepare QDB CreateDistribution commands
 // TODO: unit tests
-func (l *LocalQrouterServer) createDistributionPrepare(ctx context.Context, gossip *protos.CreateDistributionGossip) ([]qdb.QdbStatement, error) {
+func (l *LocalQrouterServer) createDistributionPrepare(ctx context.Context,
+	gossip *protos.CreateDistributionGossip) ([]qdb.QdbStatement, error) {
 	result := make([]qdb.QdbStatement, 0, len(gossip.GetDistributions()))
 	for _, ds := range gossip.GetDistributions() {
 		mds, err := distributions.DistributionFromProto(ds)
@@ -324,18 +325,28 @@ func (l *LocalQrouterServer) DropShardingRules(ctx context.Context, request *pro
 	return nil, spqrerror.ShardingRulesRemoved
 }
 
-// TODO : unit tests
-func (l *LocalQrouterServer) CreateKeyRange(ctx context.Context, request *protos.CreateKeyRangeRequest) (*protos.ModifyReply, error) {
-	ds, err := l.mgr.GetDistribution(ctx, request.KeyRangeInfo.DistributionId)
+// prepare QDB CreateKeyRange commands
+// TODO: unit tests
+func (l *LocalQrouterServer) createKeyRangePrepare(ctx context.Context,
+	gossip *protos.CreateKeyRangeGossip) ([]qdb.QdbStatement, error) {
+	result := make([]qdb.QdbStatement, 0)
+	ds, err := l.mgr.GetDistribution(ctx, gossip.KeyRangeInfo.DistributionId)
 	if err != nil {
 		return nil, err
 	}
-	err = l.mgr.CreateKeyRange(ctx, kr.KeyRangeFromProto(request.KeyRangeInfo, ds.ColTypes))
+	tranChunk, err := l.mgr.CreateKeyRange(ctx, kr.KeyRangeFromProto(gossip.KeyRangeInfo, ds.ColTypes))
 	if err != nil {
 		return nil, err
+	} else {
+		result = append(result, tranChunk.QdbStatements...)
+		return result, nil
 	}
+}
 
-	return &protos.ModifyReply{}, nil
+// TODO : unit tests
+func (l *LocalQrouterServer) CreateKeyRange(ctx context.Context,
+	request *protos.CreateKeyRangeRequest) (*protos.ModifyReplyTransaction, error) {
+	return nil, fmt.Errorf("DEPRECATED (CreateKeyRange), remove  after meta transaction implementation")
 }
 
 // GetKeyRange gets key ranges with given ids
@@ -594,11 +605,19 @@ func (l *LocalQrouterServer) ApplyMeta(ctx context.Context, request *protos.Meta
 				return nil, err
 			} else {
 				if len(cmdList) == 0 {
-					return nil, fmt.Errorf("no QDB changes in gossip request:%d", cmdType)
+					return nil, fmt.Errorf("no QDB changes in gossip request (createDistribution):%d", cmdType)
 				}
 				toExecuteCmds = append(toExecuteCmds, cmdList...)
 			}
-		//case mtran.GR_CreateKeyRange:
+		case mtran.GR_CreateKeyRange:
+			if cmdList, err := l.createKeyRangePrepare(ctx, gossipCommand.GetCreateKeyRangeRequest()); err != nil {
+				return nil, err
+			} else {
+				if len(cmdList) == 0 {
+					return nil, fmt.Errorf("no QDB changes in gossip request (createKeyRange):%d", cmdType)
+				}
+				toExecuteCmds = append(toExecuteCmds, cmdList...)
+			}
 		default:
 			return nil, fmt.Errorf("invalid meta gossip request:%d", cmdType)
 		}

@@ -43,7 +43,7 @@ func (e *EtcdMetadataBootstrapper) InitializeMetadata(ctx context.Context, r Rou
 			spqrlog.Zero.Error().Err(err).Msg("failed to initialize instance (prepare)")
 			return err
 		} else {
-			if mngr.ExecNoTran(ctx, tranChunk); err != nil {
+			if err = mngr.ExecNoTran(ctx, tranChunk); err != nil {
 				return err
 			}
 		}
@@ -59,11 +59,14 @@ func (e *EtcdMetadataBootstrapper) InitializeMetadata(ctx context.Context, r Rou
 			r := kr.KeyRangeFromDB(krs[j], d.ColTypes)
 			return !kr.CmpRangesLess(l.LowerBound, r.LowerBound, d.ColTypes)
 		})
-
 		for _, ckr := range krs {
-			if err := r.Console().Mgr().CreateKeyRange(ctx, kr.KeyRangeFromDB(ckr, d.ColTypes)); err != nil {
+			if tranChunk, err := r.Console().Mgr().CreateKeyRange(ctx, kr.KeyRangeFromDB(ckr, d.ColTypes)); err != nil {
 				spqrlog.Zero.Error().Err(err).Msg("failed to initialize instance")
 				return err
+			} else {
+				if mngr.ExecNoTran(ctx, tranChunk); err != nil {
+					return err
+				}
 			}
 		}
 	}

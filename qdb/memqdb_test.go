@@ -54,7 +54,13 @@ func TestMemqdbRacing(t *testing.T) {
 			}
 
 		},
-		func() { _ = memqdb.CreateKeyRange(ctx, mockKeyRange) },
+		func() {
+			if stmts, err := memqdb.CreateKeyRange(ctx, mockKeyRange); err != nil {
+				panic("fail run CreateKeyRange in race test")
+			} else {
+				memqdb.ExecNoTransaction(ctx, stmts)
+			}
+		},
 		func() { _ = memqdb.AddRouter(ctx, mockRouter) },
 		func() { _ = memqdb.AddShard(ctx, mockShard) },
 		func() {
@@ -203,19 +209,25 @@ func TestKeyRanges(t *testing.T) {
 	err = memqdb.ExecNoTransaction(ctx, stmts)
 	assert.NoError(err)
 
-	assert.NoError(memqdb.CreateKeyRange(ctx, &qdb.KeyRange{
+	stmts, err = memqdb.CreateKeyRange(ctx, &qdb.KeyRange{
 		LowerBound:     [][]byte{[]byte("1111")},
 		ShardID:        "sh1",
 		KeyRangeID:     "krid1",
 		DistributionId: "ds1",
-	}))
+	})
+	assert.NoError(err)
+	err = memqdb.ExecNoTransaction(ctx, stmts)
+	assert.NoError(err)
 
-	assert.Error(memqdb.CreateKeyRange(ctx, &qdb.KeyRange{
+	stmts, err = memqdb.CreateKeyRange(ctx, &qdb.KeyRange{
 		LowerBound:     [][]byte{[]byte("1111")},
 		ShardID:        "sh1",
 		KeyRangeID:     "krid2",
 		DistributionId: "dserr",
-	}))
+	})
+	assert.Error(err)
+	err = memqdb.ExecNoTransaction(ctx, stmts)
+	assert.NoError(err)
 
 	assert.NoError(memqdb.DropKeyRange(ctx, "nonexistentKeyRange"))
 }
@@ -245,7 +257,10 @@ func Test_MemQDB_GetKeyRange(t *testing.T) {
 		KeyRangeID:     "krid1",
 		DistributionId: "ds1",
 	}
-	assert.NoError(memqdb.CreateKeyRange(ctx, &keyRange1))
+	stmts, err = memqdb.CreateKeyRange(ctx, &keyRange1)
+	assert.NoError(err)
+	err = memqdb.ExecNoTransaction(ctx, stmts)
+	assert.NoError(err)
 
 	keyRange2 := qdb.KeyRange{
 		LowerBound:     [][]byte{[]byte("1111")},
@@ -253,7 +268,10 @@ func Test_MemQDB_GetKeyRange(t *testing.T) {
 		KeyRangeID:     "krid2",
 		DistributionId: "ds2",
 	}
-	assert.NoError(memqdb.CreateKeyRange(ctx, &keyRange2))
+	stmts, err = memqdb.CreateKeyRange(ctx, &keyRange2)
+	assert.NoError(err)
+	err = memqdb.ExecNoTransaction(ctx, stmts)
+	assert.NoError(err)
 
 	res, _ := memqdb.GetKeyRange(ctx, keyRange1.KeyRangeID)
 	assert.Equal(keyRange1.ShardID, res.ShardID)

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pg-sharding/spqr/pkg/models/tasks"
+	mtran "github.com/pg-sharding/spqr/pkg/models/transaction"
 )
 
 type SplitKeyRange struct {
@@ -48,7 +49,7 @@ type KeyRangeMgr interface {
 	GetKeyRange(ctx context.Context, krId string) (*KeyRange, error)
 	ListKeyRanges(ctx context.Context, distribution string) ([]*KeyRange, error)
 	ListAllKeyRanges(ctx context.Context) ([]*KeyRange, error)
-	CreateKeyRange(ctx context.Context, kr *KeyRange) error
+	CreateKeyRange(ctx context.Context, kr *KeyRange) (*mtran.MetaTransactionChunk, error)
 	LockKeyRange(ctx context.Context, krid string) (*KeyRange, error)
 	UnlockKeyRange(ctx context.Context, krid string) error
 	Split(ctx context.Context, split *SplitKeyRange) error
