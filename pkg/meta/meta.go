@@ -426,15 +426,15 @@ func processCreate(ctx context.Context, astmt spqrparser.Statement, mngr EntityM
 			spqrlog.Zero.Error().Err(err).Msg("Error when adding key range")
 			return cli.ReportError(err)
 		}
-		if err != validateKeyRange(ctx, mngr, req, tempDB) {
-			return err
+		if err = validateKeyRange(ctx, mngr, req, tempDB); err != nil {
+			return cli.ReportError(err)
 		}
 		if cmdChunk, err := mngr.CreateKeyRange(ctx, req); err != nil {
 			spqrlog.Zero.Error().Err(err).Msg("Error when adding key range")
 			return cli.ReportError(err)
 		} else {
 			if err = mngr.ExecNoTran(ctx, cmdChunk); err != nil {
-				return err
+				return cli.ReportError(err)
 			}
 		}
 		return cli.CreateKeyRange(ctx, req)

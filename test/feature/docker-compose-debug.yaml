@@ -88,9 +88,9 @@ services:
       - "7432:7432"
       - "7012:7002"
     environment:
-      - ROUTER_CONFIG=/spqr/test/feature/conf/router_cluster.yaml
+      - ROUTER_CONFIG=/spqr/test/feature/conf/router_with_coordinator.yaml
       - ROUTER_LOG=/var/log/spqr-router.log
-      - COORDINATOR_CONFIG=/spqr/test/feature/conf/coordinator.yaml
+      - COORDINATOR_CONFIG=/spqr/test/feature/conf/router_coordinator.yaml
     hostname: regress_router
     container_name: regress_router
     depends_on:
@@ -128,9 +128,9 @@ services:
       - "7433:7432"
       - "7022:7002"
     environment:
-      - ROUTER_CONFIG=/spqr/test/feature/conf/router_cluster.yaml
+      - ROUTER_CONFIG=/spqr/test/feature/conf/router_with_coordinator.yaml
       - ROUTER_LOG=/var/log/spqr-router.log
-      - COORDINATOR_CONFIG=/spqr/test/feature/conf/coordinator.yaml
+      - COORDINATOR_CONFIG=/spqr/test/feature/conf/router_coordinator_2.yaml
     hostname: regress_router_2
     container_name: regress_router_2
     depends_on:

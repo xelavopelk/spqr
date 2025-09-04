@@ -1312,7 +1312,7 @@ func InitializeScenario(s *godog.ScenarioContext, t *testing.T, debug bool) {
 func TestSpqr(t *testing.T) {
 	/*os.Setenv("DOCKER_API_VERSION", "1.47")
 	os.Setenv("GODOG_FEATURE_DIR", "generatedFeatures")
-	os.Setenv("GODOG_FEATURE", "balancer.feature")*/
+	os.Setenv("GODOG_FEATURE", "proxy_console_issues.feature")*/
 	paths := make([]string, 0)
 	featureDir := "features"
 

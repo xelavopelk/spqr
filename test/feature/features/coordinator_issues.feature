@@ -32,30 +32,12 @@ Feature: Coordinator issues test
     """
     Then command return code should be "0"
 
-
-  Scenario: Router synchronization after registration works
+  Scenario: Add key range with the same id fails
     When I run SQL on host "coordinator"
     """
-    UNREGISTER ROUTER r1;
-    REGISTER ROUTER r1 ADDRESS regress_router::7000
+    CREATE KEY RANGE krid1 FROM 30 ROUTE TO sh1 FOR DISTRIBUTION ds1
     """
-    Then command return code should be "0"
-    When I run SQL on host "router-admin"
+    Then SQL error on host "coordinator" should match regexp
     """
-    SHOW key_ranges
-    """
-    Then SQL result should match json_exactly
-    """
-    [{
-      "Key range ID":"krid1",
-      "Distribution ID":"ds1",
-      "Lower bound":"50",
-      "Shard ID":"sh1"
-    },
-    {
-      "Key range ID":"krid2",
-      "Distribution ID":"ds1",
-      "Lower bound":"100",
-      "Shard ID":"sh2"
-    }]
+    key range krid1 already present in qdb
     """

@@ -55,7 +55,13 @@ func (a *Adapter) Cache() *cache.SchemaCache {
 	panic("Adapter.Cache not implemented")
 }
 func (a *Adapter) ExecNoTran(ctx context.Context, chunk *mtran.MetaTransactionChunk) error {
-	panic("KLEPOV not implemented")
+	c := proto.NewMetaTransactionServiceClient(a.conn)
+	request := &proto.ExecNoTranRequest{
+		MetaCmdList: chunk.GossipRequests,
+		CmdList:     qdb.SliceToProto(chunk.QdbStatements),
+	}
+	_, err := c.ExecNoTran(ctx, request)
+	return err
 }
 func (a *Adapter) ExecTran(ctx context.Context, transaction *mtran.MetaTransaction) error {
 	panic("KLEPOV not implemented")
@@ -742,11 +748,14 @@ func (a *Adapter) ListShards(ctx context.Context) ([]*topology.DataShard, error)
 // - error: An error if the retrieval of the shard fails, otherwise nil.
 func (a *Adapter) GetShard(ctx context.Context, shardID string) (*topology.DataShard, error) {
 	c := proto.NewShardServiceClient(a.conn)
-	resp, err := c.GetShard(ctx, &proto.ShardRequest{Id: shardID})
-	return &topology.DataShard{
-		ID:  resp.Shard.Id,
-		Cfg: &config.Shard{RawHosts: resp.Shard.Hosts},
-	}, err
+	if resp, err := c.GetShard(ctx, &proto.ShardRequest{Id: shardID}); err != nil {
+		return nil, err
+	} else {
+		return &topology.DataShard{
+			ID:  resp.Shard.Id,
+			Cfg: &config.Shard{RawHosts: resp.Shard.Hosts},
+		}, err
+	}
 }
 
 // TODO : unit tests

@@ -1651,9 +1651,14 @@ func (qc *ClusteredCoordinator) innerSyncRouterMetadata(ctx context.Context, cc 
 			})
 
 			for _, keyrange := range krs {
-				resp, err := krClient.CreateKeyRange(ctx, &proto.CreateKeyRangeRequest{
-					KeyRangeInfo: kr.KeyRangeFromDB(keyrange, ds.ColTypes).ToProto(),
-				})
+				commands := []*proto.MetaTransactionGossip{
+					{CreateKeyRangeRequest: &proto.CreateKeyRangeGossip{
+						KeyRangeInfo: kr.KeyRangeFromDB(keyrange, ds.ColTypes).ToProto(),
+					},
+					},
+				}
+				gossipCl := proto.NewMetaTransactionGossipServiceClient(cc)
+				resp, err := gossipCl.ApplyMeta(ctx, &proto.MetaTransactionGossipRequest{Commands: commands})
 
 				if err != nil {
 					return err
