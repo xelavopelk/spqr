@@ -81,11 +81,19 @@ func initStatsCommon() {
 }
 
 func GetQuantiles() *[]float64 {
-	return &QueryStatistics.Quantiles
+	QueryStatistics.lock.RLock()
+	defer QueryStatistics.lock.RUnlock()
+	copySlice := make([]float64, len(QueryStatistics.Quantiles))
+	_ = copy(copySlice, QueryStatistics.Quantiles)
+	return &copySlice
 }
 
 func GetQuantilesStr() *[]string {
-	return &QueryStatistics.QuantilesStr
+	QueryStatistics.lock.RLock()
+	defer QueryStatistics.lock.RUnlock()
+	copySlice := make([]string, len(QueryStatistics.QuantilesStr))
+	_ = copy(copySlice, QueryStatistics.QuantilesStr)
+	return &copySlice
 }
 
 func GetTimeQuantile(statType StatisticsType, q float64, h StatHolder) float64 {
