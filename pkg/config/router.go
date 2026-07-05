@@ -12,6 +12,7 @@ type PoolMode string
 type ShardType string
 type RouterMode string
 type DefaultRouteBehaviour string
+type AdvisoryLockBehaviour string
 
 const (
 	PoolModeSession     = PoolMode("SESSION")
@@ -26,6 +27,10 @@ const (
 
 	DefaultRouteBehaviourBlock = DefaultRouteBehaviour("BLOCK")
 	DefaultRouteBehaviourAllow = DefaultRouteBehaviour("ALLOW")
+
+	AdvisoryLockBehaviourScatter = AdvisoryLockBehaviour("SCATTER")
+	AdvisoryLockBehaviourDeploy  = AdvisoryLockBehaviour("DEPLOY")
+	AdvisoryLockBehaviourBlock   = AdvisoryLockBehaviour("BLOCK")
 )
 
 var cfgRouter Router
@@ -124,8 +129,9 @@ type Router struct {
 	WatchdogBackendRule   *BackendRule  `json:"watchdog_backend_rule" toml:"watchdog_backend_rule" yaml:"watchdog_backend_rule"`
 	WatchdogSleepInterval time.Duration `json:"watchdog_sleep_interval" toml:"watchdog_sleep_interval" yaml:"watchdog_sleep_interval"`
 
-	StoreTxDataPostgresql bool          `json:"store_tx_data_postgresql" toml:"store_tx_data_postgresql" yaml:"store_tx_data_postgresql"`
-	TxDataTTL             time.Duration `json:"tx_data_ttl" toml:"tx_data_ttl" yaml:"tx_data_ttl"`
+	StoreTxDataPostgresql    bool          `json:"store_tx_data_postgresql" toml:"store_tx_data_postgresql" yaml:"store_tx_data_postgresql"`
+	TxDataTTL                time.Duration `json:"tx_data_ttl" toml:"tx_data_ttl" yaml:"tx_data_ttl"`
+	AllowAutoprotectTwoPhase bool          `json:"allow_autoprotect_two_phase" yaml:"allow_autoprotect_two_phase" toml:"allow_autoprotect_two_phase"`
 
 	DisplayGreeting bool `json:"display_greeting" toml:"display_greeting" yaml:"display_greeting"`
 }
@@ -176,6 +182,8 @@ type QRouter struct {
 
 	AllowSplitUpdate    bool `json:"allow_split_update" toml:"allow_split_update" yaml:"allow_split_update"`
 	AllowPostProcessing bool `json:"allow_postprocessing" toml:"allow_postprocessing" yaml:"allow_postprocessing"`
+
+	AdvisoryLockBehaviour AdvisoryLockBehaviour `json:"advisory_lock_behaviour" toml:"advisory_lock_behaviour" yaml:"advisory_lock_behaviour"`
 
 	/* XXX: for now, supported only for single-shard topology */
 	AutoRouteRoOnStandby bool `json:"auto_route_ro_on_standby" toml:"auto_route_ro_on_standby" yaml:"auto_route_ro_on_standby"`

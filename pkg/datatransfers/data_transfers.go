@@ -142,7 +142,7 @@ Steps:
 //
 // Returns:
 //   - error: an error if the move fails.
-func MoveKeys(ctx context.Context, fromId, toId string, krg *kr.KeyRange, ds *distributions.Distribution, db qdb.XQDB, mgr meta.EntityMgr, executorId string) error {
+func MoveKeys(ctx context.Context, fromId, toId string, krg *kr.KeyRange, ds *distributions.Distribution, db qdb.XQDB, mgr meta.EntityMgr, executorId string, icpCH icp.ICPContextHolder) error {
 	if toId == fromId {
 		return fmt.Errorf("incorrect request to move data in key range \"%s\": source and destination shards are the same", krg.ID)
 	}
@@ -192,7 +192,7 @@ func MoveKeys(ctx context.Context, fromId, toId string, krg *kr.KeyRange, ds *di
 		_ = to.Close(ctx)
 	}()
 
-	upperBound, err := resolveNextBound(ctx, krg, mgr)
+	upperBound, err := ResolveNextBound(ctx, krg, mgr)
 	if err != nil {
 		return err
 	}
@@ -214,7 +214,7 @@ func MoveKeys(ctx context.Context, fromId, toId string, krg *kr.KeyRange, ds *di
 		case qdb.Locked:
 			t := time.Now()
 			// copy data of key range to receiving shard
-			if err = copyData(ctx, from, to, fromId, toId, krg, ds, upperBound); err != nil {
+			if err = copyData(ctx, from, to, fromId, toId, krg, ds, upperBound, icpCH); err != nil {
 				return err
 			}
 			if config.CoordinatorConfig().EnableICP {
@@ -250,6 +250,11 @@ func MoveKeys(ctx context.Context, fromId, toId string, krg *kr.KeyRange, ds *di
 						count(*) > 0 as table_exists
 					FROM information_schema.tables
 					WHERE table_name = '%s' AND table_schema = '%s'`, strings.ToLower(rel.Relation.RelationName), rel.Relation.GetSchema()))
+				if config.CoordinatorConfig().EnableICP {
+					if err := icp.CheckControlPoint(icpCH, icp.AfterDeleteQueryCP); err != nil {
+						spqrlog.Zero.Info().Str("cp", icp.AfterDeleteQueryCP).Err(err).Msg("error while checking control point")
+					}
+				}
 				fromTableExists := false
 				if err = res.Scan(&fromTableExists); err != nil {
 					return err
@@ -381,7 +386,7 @@ func SyncReferenceRelation(ctx context.Context, fromId, toId string, rel *rrelat
 	return nil
 }
 
-// resolveNextBound finds the next lower bound key range from the given key range list that is greater than the lower bound of the given key range.
+// ResolveNextBound finds the next lower bound key range from the given key range list that is greater than the lower bound of the given key range.
 //
 // Parameters:
 // - ctx (context.Context): The context for the function.
@@ -391,7 +396,7 @@ func SyncReferenceRelation(ctx context.Context, fromId, toId string, rel *rrelat
 // Returns:
 // - kr.KeyRangeBound: the next lower bound key range found, or nil if no such key range exists.
 // - error: an error if the key range list cannot be retrieved or if there is an error in the function execution.
-func resolveNextBound(ctx context.Context, krg *kr.KeyRange, cr meta.EntityMgr) (kr.KeyRangeBound, error) {
+func ResolveNextBound(ctx context.Context, krg *kr.KeyRange, cr meta.EntityMgr) (kr.KeyRangeBound, error) {
 	krs, err := cr.ListKeyRanges(ctx, krg.Distribution)
 	if err != nil {
 		return nil, err
@@ -579,7 +584,7 @@ func unlockReferenceRelationOnShard(ctx context.Context, shardConn *pgx.Conn, re
 //
 // Returns:
 // - error: an error if the move fails.
-func copyData(ctx context.Context, from, to *pgx.Conn, fromShardId, toShardId string, krg *kr.KeyRange, ds *distributions.Distribution, upperBound kr.KeyRangeBound) error {
+func copyData(ctx context.Context, from, to *pgx.Conn, fromShardId, toShardId string, krg *kr.KeyRange, ds *distributions.Distribution, upperBound kr.KeyRangeBound, icpCH icp.ICPContextHolder) error {
 	schemas := make(map[string]struct{})
 	for _, rel := range ds.ListRelations() {
 		schemas[rel.Relation.GetSchema()] = struct{}{}
@@ -601,6 +606,43 @@ func copyData(ctx context.Context, from, to *pgx.Conn, fromShardId, toShardId st
 	}
 	serverNameHash := hasher.Sum64()
 	serverName := fmt.Sprintf("spqr_transfer_server_%x", serverNameHash)
+
+	fromTx, err := from.Begin(ctx)
+	if err != nil {
+		return spqrerror.NewByCode(spqrerror.SPQR_TRANSFER_ERROR).Detail("failed to begin transaction on the source shard")
+	}
+	defer func() { _ = fromTx.Rollback(ctx) }()
+	rels := make([]struct {
+		rel   *distributions.DistributedRelation
+		count int
+	}, 0)
+	for _, rel := range ds.ListRelations() {
+		fromTableExists, err := CheckTableExists(ctx, fromTx, rel.Relation)
+		if err != nil {
+			return err
+		}
+		if !fromTableExists {
+			continue
+		}
+		krCondition, err := kr.GetKRCondition(rel, krg, upperBound, "")
+		if err != nil {
+			return err
+		}
+
+		relFullName := rel.QualifiedName().String()
+		fromCount, err := GetEntriesCount(ctx, fromTx, relFullName, krCondition)
+		if err != nil {
+			return err
+		}
+		rels = append(rels, struct {
+			rel   *distributions.DistributedRelation
+			count int
+		}{rel: rel, count: fromCount})
+	}
+	if err := fromTx.Commit(ctx); err != nil {
+		return err
+	}
+
 	tx, err := to.Begin(ctx)
 	if err != nil {
 		return spqrerror.Newf(spqrerror.SPQR_TRANSFER_ERROR, "could not move the data: could not start transaction on destination shard: %s", err)
@@ -620,23 +662,10 @@ func copyData(ctx context.Context, from, to *pgx.Conn, fromShardId, toShardId st
 		}
 	}
 
-	for _, rel := range ds.ListRelations() {
+	for _, relWithCount := range rels {
+		rel := relWithCount.rel
+		fromCount := relWithCount.count
 		krCondition, err := kr.GetKRCondition(rel, krg, upperBound, "")
-		if err != nil {
-			return err
-		}
-		// check that relation exists on sending shard and there is data to copy. If not, skip the relation
-
-		fromTableExists, err := CheckTableExists(ctx, from, rel.Relation)
-		if err != nil {
-			return err
-		}
-		if !fromTableExists {
-			continue
-		}
-
-		relFullName := rel.QualifiedName().String()
-		fromCount, err := getEntriesCount(ctx, from, relFullName, krCondition)
 		if err != nil {
 			return err
 		}
@@ -648,7 +677,8 @@ func copyData(ctx context.Context, from, to *pgx.Conn, fromShardId, toShardId st
 		if !toTableExists {
 			return fmt.Errorf("relation %s does not exist on receiving shard", rel.Relation)
 		}
-		toCount, err := getEntriesCount(ctx, tx, relFullName, krCondition)
+		relFullName := rel.QualifiedName().String()
+		toCount, err := GetEntriesCount(ctx, tx, relFullName, krCondition)
 		if err != nil {
 			return err
 		}
@@ -671,10 +701,21 @@ func copyData(ctx context.Context, from, to *pgx.Conn, fromShardId, toShardId st
 					WHERE %s
 					FOR UPDATE
 `, relFullName, colNames, colNames, fmt.Sprintf("%s_%s.%q", serverName, rel.Relation.GetSchema(), strings.ToLower(rel.Relation.RelationName)), krCondition)
+		if config.CoordinatorConfig().EnableICP {
+			if err := icp.CheckControlPoint(icpCH, icp.BeforeInsertCP); err != nil {
+				spqrlog.Zero.Info().Str("cp", icp.BeforeInsertCP).Err(err).Msg("error while checking control point")
+			}
+		}
 		_, err = tx.Exec(ctx, query)
+		if config.CoordinatorConfig().EnableICP {
+			if err := icp.CheckControlPoint(icpCH, icp.AfterInsertCP); err != nil {
+				spqrlog.Zero.Info().Str("cp", icp.AfterInsertCP).Err(err).Msg("error while checking control point")
+			}
+		}
 		if err != nil {
 			return spqrerror.Newf(spqrerror.SPQR_TRANSFER_ERROR, "could not move the data: %s", err)
 		}
+
 	}
 	if config.CoordinatorConfig().UseSPQRGuard {
 		if _, err := tx.Exec(ctx, InsertKeyRangeMeta, krg.ID); err != nil {
@@ -720,19 +761,27 @@ func copyReferenceRelationData(ctx context.Context, from, to *pgx.Conn, fromId, 
 		return nil
 	}
 	relFullName := rel.QualifiedName().String()
-	fromCount, err := getEntriesCount(ctx, from, relFullName, "true")
+	fromCount, err := GetEntriesCount(ctx, from, relFullName, "true")
 	if err != nil {
 		return err
 	}
+	tx, err := to.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("could not start transaction to copy reference table data: %s", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
 	// check that relation exists on receiving shard. If not, exit
-	toTableExists, err := CheckTableExists(ctx, to, rel.RelationName)
+	toTableExists, err := CheckTableExists(ctx, tx, rel.RelationName)
 	if err != nil {
 		return err
 	}
 	if !toTableExists {
 		return fmt.Errorf("relation %s does not exist on receiving shard", rel.QualifiedName())
 	}
-	toCount, err := getEntriesCount(ctx, to, relFullName, "true")
+	toCount, err := GetEntriesCount(ctx, tx, relFullName, "true")
 	if err != nil {
 		return err
 	}
@@ -748,10 +797,6 @@ func copyReferenceRelationData(ctx context.Context, from, to *pgx.Conn, fromId, 
 		if err := icp.CheckControlPoint(nil, icp.CopyReferenceRelationDataCP); err != nil {
 			spqrlog.Zero.Info().Str("cp", icp.CopyReferenceRelationDataCP).Err(err).Msg("error while checking control point")
 		}
-	}
-	tx, err := to.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("could not start transaction to copy reference table data: %s", err)
 	}
 
 	cols, err := GetTableColumns(ctx, tx, rel.RelationName)
@@ -901,7 +946,7 @@ func CheckConstraints(ctx context.Context, conn *pgx.Conn, dsRels []string, rpRe
 	return false, conName, nil
 }
 
-// getEntriesCount retrieves the number of entries from a database table based on the provided condition.
+// GetEntriesCount retrieves the number of entries from a database table based on the provided condition.
 //
 // Parameters:
 // - ctx (context.Context): The context for the function.
@@ -912,7 +957,7 @@ func CheckConstraints(ctx context.Context, conn *pgx.Conn, dsRels []string, rpRe
 // Returns:
 // - int: the count of entries in the table.
 // - error: an error if there was a problem executing the query.
-func getEntriesCount(ctx context.Context, conn Queryable, relName string, condition string) (int, error) {
+func GetEntriesCount(ctx context.Context, conn Queryable, relName string, condition string) (int, error) {
 	res := conn.QueryRow(ctx, fmt.Sprintf(`SELECT count(*) FROM %s WHERE %s`, relName, condition))
 	count := 0
 	if err := res.Scan(&count); err != nil {

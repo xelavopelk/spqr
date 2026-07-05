@@ -35,6 +35,7 @@ type Conn struct {
 	stale atomic.Bool
 
 	allocTime time.Time
+	lifetime  time.Duration
 
 	dataPending bool
 
@@ -85,6 +86,11 @@ func (sh *Conn) ListPreparedStatements() []shard.PreparedStatementsMgrDescriptor
 // Returns:
 // - error: An error if the connection could not be closed.
 func (sh *Conn) Close() error {
+	spqrlog.Zero.Error().
+		Uint("id", sh.ID()).
+		Int64("tx served", sh.TxServed()).
+		Str("hostname", sh.Instance().Hostname()).
+		Msg("closing backend connection")
 	return sh.dedicated.Close()
 }
 
@@ -287,6 +293,10 @@ func (sh *Conn) CreatedAt() time.Time {
 	return sh.allocTime
 }
 
+func (sh *Conn) ServerLifetime() time.Duration {
+	return sh.lifetime
+}
+
 func (sh *Conn) Pid() uint32 {
 	return sh.backendKeyPid
 }
@@ -401,6 +411,7 @@ func NewShardHostInstance(
 		stmtDesc:  map[uint64]*prepstatement.PreparedStatementDescriptor{},
 		dedicated: pgi,
 		allocTime: time.Now(),
+		lifetime:  beRule.ServerLifetime,
 	}
 
 	if dtSh.dedicated.Status() == conn.NotInitialized {
