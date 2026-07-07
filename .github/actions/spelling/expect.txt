@@ -47,6 +47,7 @@ canreq
 ccb
 ccfg
 ccmsg
+chardata
 cillum
 Cimpl
 CIn
@@ -83,6 +84,7 @@ Cta
 CTEs
 ctid
 ctl
+ctrf
 ctsa
 cupidatat
 currkr
@@ -196,8 +198,8 @@ gomod
 goooal
 gorm
 goyacc
-Greenplum
 Grac
+Greenplum
 gss
 gssapi
 GSSREQ
