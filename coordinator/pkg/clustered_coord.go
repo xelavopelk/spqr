@@ -62,7 +62,18 @@ import (
 )
 
 type grpcConnMgr struct {
+	InstanceStartTime time.Time
 	*ClusteredCoordinator
+}
+
+// LastReloadTime implements [connmgr.ConnectionMgr].
+func (ci grpcConnMgr) LastReloadTime() time.Time {
+	return time.Now()
+}
+
+// StartTime implements [connmgr.ConnectionMgr].
+func (ci grpcConnMgr) StartTime() time.Time {
+	return ci.InstanceStartTime
 }
 
 // InstanceHealthChecks implements connmgr.ConnectionStatsMgr.
@@ -90,6 +101,16 @@ func (ci grpcConnMgr) TotalCancelCount() int64 {
 // TODO implement it
 // ActiveTCPCount implements connmgr.ConnectionStatMgr
 func (ci grpcConnMgr) TotalTCPCount() int64 {
+	return 0
+}
+
+// FailedAuthCount implements RuleRouter.
+func (ci grpcConnMgr) FailedAuthCount() int64 {
+	return 0
+}
+
+// FailedInitCount implements RuleRouter.
+func (ci grpcConnMgr) FailedInitCount() int64 {
 	return 0
 }
 
@@ -1122,7 +1143,7 @@ func (qc *ClusteredCoordinator) Move(ctx context.Context, req *kr.MoveKeyRange, 
 					spqrlog.Zero.Info().Str("cp", icp.AfterUnlockKeyRangeCP).Err(err).Msg("error while checking control point")
 				}
 			}
-			if err := qc.db.DeleteKeyRangeMove(ctx, move.MoveId); err != nil {
+			if err := qc.db.DeleteKeyRangeMove(ctx, move.MoveId, false); err != nil {
 				return err
 			}
 			move = nil
@@ -2795,7 +2816,7 @@ func (qc *ClusteredCoordinator) ProcClient(ctx context.Context, nconn net.Conn, 
 		return nil
 	}
 
-	ci := grpcConnMgr{ClusteredCoordinator: qc}
+	ci := grpcConnMgr{ClusteredCoordinator: qc, InstanceStartTime: time.Now()}
 	cli := clientinteractor.NewPSQLInteractor(cl)
 	for {
 		// TODO: check leader status

@@ -294,7 +294,7 @@ Feature: spqr-monitor test
     """
     Then command output should match regexp
     """
-    ^$
+    key range .krid1. is safe to unlock
     """
   
   Scenario: spqr-monitor verify succeeds when there are the same number of keys on both shards
@@ -346,7 +346,7 @@ Feature: spqr-monitor test
     """
     Then command output should match regexp
     """
-    ^$
+    key range .krid1. is safe to unlock
     """
 
   Scenario: spqr-monitor recover does nothing when no move task in progress
@@ -695,6 +695,25 @@ Feature: spqr-monitor test
     }
     """
     Then command return code should be "0"
+    When I record in qdb key range move
+    """
+    {
+    "move_id": "move1",
+    "key_range_id": "krid1",
+    "shard_id": "sh2",
+    "status": "LOCKED"
+    }
+    """
+    Then command return code should be "0"
+    When I record in qdb data transfer transaction with name "krid1"
+    """
+    {
+    "to_shard": "sh2",
+    "from_shard": "sh1",
+    "status": "planned"
+    }
+    """
+    Then command return code should be "0"
     When I record in qdb status of move task group "tgid1"
     """
     {
@@ -796,6 +815,25 @@ Feature: spqr-monitor test
         "state":         0,
         "task_group_id": "tgid1"
       }
+    }
+    """
+    Then command return code should be "0"
+    When I record in qdb key range move
+    """
+    {
+    "move_id": "move1",
+    "key_range_id": "krid1",
+    "shard_id": "sh2",
+    "status": "LOCKED"
+    }
+    """
+    Then command return code should be "0"
+    When I record in qdb data transfer transaction with name "krid1"
+    """
+    {
+    "to_shard": "sh2",
+    "from_shard": "sh1",
+    "status": "data_copied"
     }
     """
     Then command return code should be "0"

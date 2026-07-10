@@ -200,7 +200,11 @@ var (
 			if shardToConn == nil {
 				return fmt.Errorf("key range \"%s\" does not belong to any move task", keyRangeId)
 			}
-			return checkUnlockKeyRange(ctx, db, keyRange, ds, shardToConn, shardFromConn)
+			if err := checkUnlockKeyRange(ctx, db, keyRange, ds, shardToConn, shardFromConn); err != nil {
+				return err
+			}
+			log.Printf("key range \"%s\" is safe to unlock\n", keyRangeId)
+			return nil
 		},
 	}
 )
@@ -505,7 +509,7 @@ func processKeyRange(ctx context.Context, db *qdb.EtcdQDB, keyRangeService proto
 		}
 	}
 	if moveOp != nil {
-		if err := db.DeleteKeyRangeMove(ctx, moveOp.MoveId); err != nil {
+		if err := db.DeleteKeyRangeMove(ctx, moveOp.MoveId, true); err != nil {
 			return err
 		}
 	}

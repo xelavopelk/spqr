@@ -26,6 +26,7 @@ astmt
 authed
 Autoattach
 autoprotect
+Backticks
 basebackup
 bcad
 bcc
@@ -47,6 +48,7 @@ canreq
 ccb
 ccfg
 ccmsg
+chardata
 cillum
 Cimpl
 CIn
@@ -83,6 +85,7 @@ Cta
 CTEs
 ctid
 ctl
+ctrf
 ctsa
 cupidatat
 currkr
@@ -119,6 +122,7 @@ dockerhub
 dolore
 dolorem
 doloremque
+dorny
 dotnet
 DOUBLEOID
 drb
@@ -158,8 +162,8 @@ FAFBFF
 fdw
 feda
 FFCCAC
-FFFF
 ffd
+FFFF
 fffffffffffe
 FFFFFFFFFFFFFFFF
 filerow
@@ -195,8 +199,8 @@ gomod
 goooal
 gorm
 goyacc
-Greenplum
 Grac
+Greenplum
 gss
 gssapi
 GSSREQ
@@ -340,8 +344,8 @@ multidim
 multierr
 multishard
 murmurhash
-mydb
 mvccpb
+mydb
 mylogs
 myuser
 myworkloadlog
@@ -361,6 +365,7 @@ Noticef
 notok
 nroute
 nsecs
+nselect
 nspname
 nulla
 Objtype

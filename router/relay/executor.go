@@ -1023,6 +1023,7 @@ func (s *QueryStateExecutorImpl) executeSliceGuts(qd *QueryDesc, topPlan plan.Pl
 
 		spqrlog.Zero.Debug().
 			Str("server", serv.Name()).
+			Uint("client", s.Client().ID()).
 			Type("msg-type", msg).
 			Msg("received message from server in execute")
 
@@ -1142,7 +1143,7 @@ func (s *QueryStateExecutorImpl) executeSliceGuts(qd *QueryDesc, topPlan plan.Pl
 					}
 				}
 			} else {
-				return rerrors.ErrExecutorSyncLost.Detail("unexpected row description in slice deploy")
+				return rerrors.ErrExecutorSyncLost.Detail(fmt.Sprintf("unexpected row description in slice deploy:%+v", msg))
 			}
 		case *pgproto3.ParameterStatus:
 			/* do not resent this to client */
