@@ -12,6 +12,7 @@ adipiscing
 adminpassword
 AExpr
 afe
+Aflake
 aliasname
 aliqua
 aliquip
@@ -42,6 +43,7 @@ bootstraping
 Bootstrapper
 buildpackage
 cachedchecker
+Cagent
 caio
 CANCELREQ
 canreq
@@ -138,6 +140,9 @@ Dzz
 ebff
 eda
 edabaf
+ededed
+eedb
+eedba
 efef
 eiusmod
 elephantsql
