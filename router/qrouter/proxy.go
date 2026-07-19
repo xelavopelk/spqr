@@ -228,7 +228,7 @@ func (qr *ProxyQrouter) registerMetrics() {
 	}
 	failedInitCount := &metrics.DynamicGauge{
 		Name: metrics.ClientInitFailCountName,
-		Help: "Failed client connection initilisation count",
+		Help: "Failed client connection initialisation count",
 		Getter: func() float64 {
 			return float64(qr.csm.FailedInitCount())
 		},
