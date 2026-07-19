@@ -17,9 +17,9 @@ const (
 	MaxMetricStartupTime = 5 * time.Second
 	MetricStartupTick    = 100 * time.Millisecond
 
-	// prefix of all metric names.
 	DefaultMetricPath = "/metric"
-	MetricPrefix      = "spqr_"
+	// prefix of all metric names.
+	MetricPrefix = "spqr_"
 )
 
 type MetricRegistry interface {

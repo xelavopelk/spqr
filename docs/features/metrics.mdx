@@ -1,0 +1,20 @@
+---
+title: 'Metrics'
+---
+
+SPQR provides a set of metrics with appropriate Prometheus metric types and exposes them through an HTTP server for collection by Prometheus.
+Exporter HTTP-endpoint can be enabled by `use_metrics` router configuration parameter. Also you can configure endpoint by using `metric_path` and `metric_port`.
+
+# Router metrics
+
+| Name                                        | Type           | Description                                          | Labels      |
+|---------------------------------------------|----------------|------------------------------------------------------|-------------|
+| `spqr_reloads_total`                        | Gauge          | Config reloads count                                 | []          |
+| `spqr_inbound_queries_total`                | Gauge          | Number of incoming queries                           | []          |
+| `spqr_router_client_conn_tcp_total`         | Gauge          | Current number of client tcp connections             | []          |
+| `spqr_router_client_conn_active_tcp_total`  | Gauge          | Current number of active client tcp connections      | []          |
+| `spqr_router_time`                          | Summary        | Routing latency time quantile                        | []          |
+| `spqr_shard_time`                           | Summary        | Any valid port number                                | []          |
+| `spqr_canceled_requests_total`              | Gauge          | Shard latency time quantiles                         | []          |
+| `spqr_client_init_fail_count_total`         | Gauge          | Failed client connection initilisation count         | []          |
+| `spqr_client_auth_fail_count_total`         | Gauge          | Failed client connection authentification count      | []          |

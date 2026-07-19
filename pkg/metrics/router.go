@@ -8,8 +8,12 @@ const (
 	ConfigReloadsTotalName        = MetricPrefix + "reloads_total"
 	InboundQueriesTotalName       = MetricPrefix + "inbound_queries_total"
 	ClientConnectionsTCPTotalName = MetricPrefix + "router_client_conn_tcp_total"
-	RouterTimeSummary             = MetricPrefix + "router_time"
-	ShardTimeSummary              = MetricPrefix + "shard_time"
+	ActiveTCPCountName            = MetricPrefix + "router_client_conn_active_tcp_total"
+	RouterTimeSummaryName         = MetricPrefix + "router_time"
+	ShardTimeSummaryName          = MetricPrefix + "shard_time"
+	CancelRequestCountName        = MetricPrefix + "canceled_requests_total"
+	ClientInitFailCountName       = MetricPrefix + "client_init_fail_count_total"
+	ClientAuthFailCountName       = MetricPrefix + "client_auth_fail_count_total"
 )
 
 type RouterMetricRegistry struct {

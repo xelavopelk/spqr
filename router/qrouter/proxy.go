@@ -209,6 +209,40 @@ func (qr *ProxyQrouter) registerMetrics() {
 		Value: 0,
 	}
 
+	activeConnectionsMetric := &metrics.DynamicGauge{
+		Name: metrics.ActiveTCPCountName,
+		Help: "Current number of active client tcp connections",
+		Getter: func() float64 {
+			return float64(qr.csm.ActiveTCPCount())
+		},
+		Value: 0,
+	}
+
+	totalCancelCount := &metrics.DynamicGauge{
+		Name: metrics.CancelRequestCountName,
+		Help: "Number of requests canceled from client side",
+		Getter: func() float64 {
+			return float64(qr.csm.TotalCancelCount())
+		},
+		Value: 0,
+	}
+	failedInitCount := &metrics.DynamicGauge{
+		Name: metrics.ClientInitFailCountName,
+		Help: "Failed client connection initilisation count",
+		Getter: func() float64 {
+			return float64(qr.csm.FailedInitCount())
+		},
+		Value: 0,
+	}
+	failedAuthCount := &metrics.DynamicGauge{
+		Name: metrics.ClientAuthFailCountName,
+		Help: "Failed client connection authentification count",
+		Getter: func() float64 {
+			return float64(qr.csm.FailedAuthCount())
+		},
+		Value: 0,
+	}
+
 	inboundQueriesTotalMetric := &metrics.DynamicGauge{
 		Name: metrics.InboundQueriesTotalName,
 		Help: "Number of incoming queries",
@@ -218,8 +252,8 @@ func (qr *ProxyQrouter) registerMetrics() {
 		Value: 0,
 	}
 	routerTimeMetric := &metrics.DynamicSummary{
-		Name: metrics.RouterTimeSummary,
-		Help: "routing latency time quantiles",
+		Name: metrics.RouterTimeSummaryName,
+		Help: "Routing latency time quantiles",
 		GetSum: func() float64 {
 			return statistics.GetRouterTimeTotalSum()
 		},
@@ -229,8 +263,8 @@ func (qr *ProxyQrouter) registerMetrics() {
 		GetQuantiles: func() map[float64]float64 { return getTimeBuckets(statistics.StatisticsTypeRouter) },
 	}
 	shardTimeMetric := &metrics.DynamicSummary{
-		Name: metrics.ShardTimeSummary,
-		Help: "shard latency time quantiles",
+		Name: metrics.ShardTimeSummaryName,
+		Help: "Shard latency time quantiles",
 		GetSum: func() float64 {
 			return statistics.GetShardTimeTotalSum()
 		},
@@ -241,6 +275,10 @@ func (qr *ProxyQrouter) registerMetrics() {
 	}
 
 	qr.metricRegistry.RegisterDynamicGauge(totalConnectionsMetric)
+	qr.metricRegistry.RegisterDynamicGauge(activeConnectionsMetric)
+	qr.metricRegistry.RegisterDynamicGauge(totalCancelCount)
+	qr.metricRegistry.RegisterDynamicGauge(failedInitCount)
+	qr.metricRegistry.RegisterDynamicGauge(failedAuthCount)
 	qr.metricRegistry.RegisterDynamicGauge(inboundQueriesTotalMetric)
 	qr.metricRegistry.RegisterDynamicSummary(routerTimeMetric)
 	qr.metricRegistry.RegisterDynamicSummary(shardTimeMetric)
