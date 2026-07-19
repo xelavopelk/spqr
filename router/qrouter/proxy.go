@@ -236,7 +236,7 @@ func (qr *ProxyQrouter) registerMetrics() {
 	}
 	failedAuthCount := &metrics.DynamicGauge{
 		Name: metrics.ClientAuthFailCountName,
-		Help: "Failed client connection authentification count",
+		Help: "Failed client connection authentication count",
 		Getter: func() float64 {
 			return float64(qr.csm.FailedAuthCount())
 		},
