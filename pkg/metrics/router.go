@@ -51,6 +51,13 @@ func (m *RouterMetricRegistry) RegisterDynamicGauge(gauge *DynamicGauge) {
 	}
 }
 
+func (m *RouterMetricRegistry) RegisterDynamicCounter(counter *DynamicCounter) {
+	if _, ok := m.registeredDynamic[counter.Name]; !ok {
+		m.registeredDynamic[counter.Name] = struct{}{}
+		m.registry.MustRegister(counter)
+	}
+}
+
 func (m *RouterMetricRegistry) RegisterDynamicSummary(summary *DynamicSummary) {
 	if _, ok := m.registeredDynamic[summary.Name]; !ok {
 		m.registeredDynamic[summary.Name] = struct{}{}

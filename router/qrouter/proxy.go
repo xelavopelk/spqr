@@ -200,7 +200,7 @@ func getTimeBuckets(statType statistics.StatisticsType) map[float64]float64 {
 }
 
 func (qr *ProxyQrouter) registerMetrics() {
-	totalConnectionsMetric := &metrics.DynamicGauge{
+	totalConnectionsMetric := &metrics.DynamicCounter{
 		Name: metrics.ClientConnectionsTCPTotalName,
 		Help: "Current number of client tcp connections",
 		Getter: func() float64 {
@@ -218,7 +218,7 @@ func (qr *ProxyQrouter) registerMetrics() {
 		Value: 0,
 	}
 
-	totalCancelCount := &metrics.DynamicGauge{
+	totalCancelCount := &metrics.DynamicCounter{
 		Name: metrics.CancelRequestCountName,
 		Help: "Number of requests canceled from client side",
 		Getter: func() float64 {
@@ -226,7 +226,7 @@ func (qr *ProxyQrouter) registerMetrics() {
 		},
 		Value: 0,
 	}
-	failedInitCount := &metrics.DynamicGauge{
+	failedInitCount := &metrics.DynamicCounter{
 		Name: metrics.ClientInitFailCountName,
 		Help: "Failed client connection initialisation count",
 		Getter: func() float64 {
@@ -234,7 +234,7 @@ func (qr *ProxyQrouter) registerMetrics() {
 		},
 		Value: 0,
 	}
-	failedAuthCount := &metrics.DynamicGauge{
+	failedAuthCount := &metrics.DynamicCounter{
 		Name: metrics.ClientAuthFailCountName,
 		Help: "Failed client connection authentication count",
 		Getter: func() float64 {
@@ -243,7 +243,7 @@ func (qr *ProxyQrouter) registerMetrics() {
 		Value: 0,
 	}
 
-	inboundQueriesTotalMetric := &metrics.DynamicGauge{
+	inboundQueriesTotalMetric := &metrics.DynamicCounter{
 		Name: metrics.InboundQueriesTotalName,
 		Help: "Number of incoming queries",
 		Getter: func() float64 {
@@ -274,12 +274,12 @@ func (qr *ProxyQrouter) registerMetrics() {
 		GetQuantiles: func() map[float64]float64 { return getTimeBuckets(statistics.StatisticsTypeShard) },
 	}
 
-	qr.metricRegistry.RegisterDynamicGauge(totalConnectionsMetric)
+	qr.metricRegistry.RegisterDynamicCounter(totalConnectionsMetric)
 	qr.metricRegistry.RegisterDynamicGauge(activeConnectionsMetric)
-	qr.metricRegistry.RegisterDynamicGauge(totalCancelCount)
-	qr.metricRegistry.RegisterDynamicGauge(failedInitCount)
-	qr.metricRegistry.RegisterDynamicGauge(failedAuthCount)
-	qr.metricRegistry.RegisterDynamicGauge(inboundQueriesTotalMetric)
+	qr.metricRegistry.RegisterDynamicCounter(totalCancelCount)
+	qr.metricRegistry.RegisterDynamicCounter(failedInitCount)
+	qr.metricRegistry.RegisterDynamicCounter(failedAuthCount)
+	qr.metricRegistry.RegisterDynamicCounter(inboundQueriesTotalMetric)
 	qr.metricRegistry.RegisterDynamicSummary(routerTimeMetric)
 	qr.metricRegistry.RegisterDynamicSummary(shardTimeMetric)
 }
